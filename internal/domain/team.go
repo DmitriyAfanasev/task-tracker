@@ -71,7 +71,7 @@ type TasksByStatus struct {
 }
 
 type TopAssignee struct {
-	UserID      int64
-	Name        string
-	ClosedTasks int64
+	UserID      int64  `json:"user_id"`
+	Name        string `json:"name"`
+	ClosedTasks int64  `json:"closed_tasks"`
 }

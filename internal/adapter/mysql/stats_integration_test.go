@@ -5,34 +5,57 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/testcontainers/testcontainers-go/modules/mysql"
+	"github.com/testcontainers/testcontainers-go/modules/redis"
 
 	"secunda/migrations"
 )
 
-// TestTeamStatsRepositoryIntegration запускается против настоящего MySQL 8.
-// Передайте отдельную тестовую БД в TEST_MYSQL_DSN; без неё обычный go test
-// остаётся полностью самодостаточным.
+// TestTeamStatsRepositoryIntegration запускает тестовый MySQL через testcontainers,
+// применяет миграции, вставляет данные и проверяет SQL-отчёт.
 func TestTeamStatsRepositoryIntegration(t *testing.T) {
-	dsn := os.Getenv("TEST_MYSQL_DSN")
-	if dsn == "" {
-		t.Skip("TEST_MYSQL_DSN is not set")
+	ctx := context.Background()
+
+	// --- Поднимаем MySQL ---
+	mysqldb, err := mysql.Run(ctx,
+		"mysql:8.0",
+		mysql.WithDatabase("secunda_test"),
+		mysql.WithUsername("root"),
+		mysql.WithPassword("test_pass"),
+	)
+	if err != nil {
+		t.Fatalf("launch MySQL container: %v", err)
+	}
+	t.Cleanup(func() { _ = mysqldb.Terminate(ctx) })
+
+	connStr, err := mysqldb.ConnectionString(ctx)
+	if err != nil {
+		t.Fatalf("MySQL connection string: %v", err)
 	}
 
-	db, err := sqlx.Connect("mysql", dsn)
+	db, err := Open(ctx, connStr, 25, 25, 5*time.Minute)
 	if err != nil {
 		t.Fatalf("connect MySQL: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := migrations.Up(db.DB, slog.New(slog.NewTextHandler(os.Stderr, nil))); err != nil {
+	defer db.Close()
+
+	if err := migrations.Up(db.DB, slog.Default()); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 
-	ctx := context.Background()
+	// --- Поднимаем Redis (для кеша, если нужен) ---
+	redisContainer, err := redis.Run(ctx,
+		"redis:7-alpine",
+	)
+	if err != nil {
+		t.Fatalf("launch Redis container: %v", err)
+	}
+	t.Cleanup(func() { _ = redisContainer.Terminate(ctx) })
+
+	// --- Тестовые данные ---
 	stamp := time.Now().UTC().UnixNano()
 	insertUser := func(name string) int64 {
 		t.Helper()
@@ -122,6 +145,7 @@ func TestTeamStatsRepositoryIntegration(t *testing.T) {
 		}
 	}
 
+	// --- Проверка отчёта ---
 	stats, err := NewTeamStatsRepository(db).Stats(ctx, teamID)
 	if err != nil {
 		t.Fatalf("Stats() error: %v", err)

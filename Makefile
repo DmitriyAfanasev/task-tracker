@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: up down logs ps run build test vet fmt openapigen migrate-up migrate-down
+.PHONY: up down logs ps run build test vet fmt openapigen migrate-up migrate-down test-integration
 
 up:
 	docker compose up --build -d
@@ -19,6 +19,9 @@ build:
 
 test:
 	go test ./...
+
+test-integration:
+	go test -tags=integration -count=1 -v ./internal/adapter/mysql/ -run TestTeamStatsRepositoryIntegration
 
 vet:
 	go vet ./...
