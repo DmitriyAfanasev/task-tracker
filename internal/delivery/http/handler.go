@@ -10,15 +10,15 @@ import (
 
 // AuthUseCase — порт HTTP-слоя: хендлер не зависит от конкретной реализации.
 type AuthUseCase interface {
-	Register(ctx context.Context, cmd usecase.RegisterCommand) (*usecase.AuthResult, error)
-	Login(ctx context.Context, cmd usecase.LoginCommand) (*usecase.AuthResult, error)
+	Register(ctx context.Context, cmd usecase.RegisterRequest) (*usecase.AuthResult, error)
+	Login(ctx context.Context, cmd usecase.LoginRequest) (*usecase.AuthResult, error)
 }
 
 // TeamUseCase — порт HTTP-слоя для сценариев команд.
 type TeamUseCase interface {
-	Create(ctx context.Context, cmd usecase.CreateTeamCommand) (*domain.Team, error)
+	Create(ctx context.Context, cmd usecase.CreateTeamRequest) (*domain.Team, error)
 	List(ctx context.Context, userID int64) ([]domain.TeamWithRole, error)
-	Invite(ctx context.Context, cmd usecase.InviteMemberCommand) (*usecase.TeamMember, error)
+	Invite(ctx context.Context, cmd usecase.InviteMemberRequest) (*usecase.TeamMember, error)
 }
 
 // TeamStatsUseCase — сценарий SQL-аналитики команды.
@@ -28,11 +28,11 @@ type TeamStatsUseCase interface {
 
 // TaskUseCase — порт HTTP-слоя для сценариев задач.
 type TaskUseCase interface {
-	Create(ctx context.Context, cmd usecase.CreateTaskCommand) (*domain.Task, error)
+	Create(ctx context.Context, cmd usecase.CreateTaskRequest) (*domain.Task, error)
 	List(ctx context.Context, query usecase.ListTasksQuery) (*usecase.TaskListResult, error)
-	Update(ctx context.Context, cmd usecase.UpdateTaskCommand) (*domain.Task, error)
+	Update(ctx context.Context, cmd usecase.UpdateTaskRequest) (*domain.Task, error)
 	History(ctx context.Context, userID, taskID int64) ([]domain.TaskHistoryEntry, error)
-	AddComment(ctx context.Context, cmd usecase.AddCommentCommand) (*domain.TaskComment, error)
+	AddComment(ctx context.Context, cmd usecase.AddCommentRequest) (*domain.TaskComment, error)
 	Comments(ctx context.Context, query usecase.ListCommentsQuery) (*usecase.CommentListResult, error)
 }
 
@@ -56,7 +56,7 @@ func (h *Handler) Register(ctx context.Context, request openapi.RegisterRequestO
 		return nil, domain.ErrBadRequest
 	}
 
-	result, err := h.auth.Register(ctx, usecase.RegisterCommand{
+	result, err := h.auth.Register(ctx, usecase.RegisterRequest{
 		Email:    string(request.Body.Email),
 		Password: request.Body.Password,
 		Name:     request.Body.Name,
@@ -77,7 +77,7 @@ func (h *Handler) Login(ctx context.Context, request openapi.LoginRequestObject)
 		return nil, domain.ErrBadRequest
 	}
 
-	result, err := h.auth.Login(ctx, usecase.LoginCommand{
+	result, err := h.auth.Login(ctx, usecase.LoginRequest{
 		Email:    string(request.Body.Email),
 		Password: request.Body.Password,
 	})
@@ -101,7 +101,7 @@ func (h *Handler) CreateTeam(ctx context.Context, request openapi.CreateTeamRequ
 		return nil, domain.ErrBadRequest
 	}
 
-	team, err := h.teams.Create(ctx, usecase.CreateTeamCommand{
+	team, err := h.teams.Create(ctx, usecase.CreateTeamRequest{
 		OwnerID: userID,
 		Name:    request.Body.Name,
 	})
@@ -140,7 +140,7 @@ func (h *Handler) InviteMember(ctx context.Context, request openapi.InviteMember
 		return nil, domain.ErrBadRequest
 	}
 
-	member, err := h.teams.Invite(ctx, usecase.InviteMemberCommand{
+	member, err := h.teams.Invite(ctx, usecase.InviteMemberRequest{
 		CallerID: userID,
 		TeamID:   int64(request.Id),
 		UserID:   request.Body.UserId,
@@ -175,13 +175,12 @@ func (h *Handler) CreateTask(ctx context.Context, request openapi.CreateTaskRequ
 		return nil, domain.ErrBadRequest
 	}
 
-	task, err := h.tasks.Create(ctx, usecase.CreateTaskCommand{
+	task, err := h.tasks.Create(ctx, usecase.CreateTaskRequest{
 		UserID:      userID,
 		TeamID:      request.Body.TeamId,
 		Title:       request.Body.Title,
 		Description: request.Body.Description,
 		Status:      toDomainStatusPtr(request.Body.Status),
-		AssigneeID:  request.Body.AssigneeId,
 	})
 	if err != nil {
 		return nil, err
@@ -230,7 +229,7 @@ func (h *Handler) UpdateTask(ctx context.Context, request openapi.UpdateTaskRequ
 		return nil, domain.ErrBadRequest
 	}
 
-	task, err := h.tasks.Update(ctx, usecase.UpdateTaskCommand{
+	task, err := h.tasks.Update(ctx, usecase.UpdateTaskRequest{
 		UserID:          userID,
 		TaskID:          int64(request.Id),
 		Title:           request.Body.Title,
@@ -274,7 +273,7 @@ func (h *Handler) AddTaskComment(ctx context.Context, request openapi.AddTaskCom
 		return nil, domain.ErrBadRequest
 	}
 
-	comment, err := h.tasks.AddComment(ctx, usecase.AddCommentCommand{
+	comment, err := h.tasks.AddComment(ctx, usecase.AddCommentRequest{
 		UserID:  userID,
 		TaskID:  int64(request.Id),
 		Content: request.Body.Content,

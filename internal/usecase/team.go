@@ -9,12 +9,12 @@ import (
 	"secunda/internal/domain"
 )
 
-type CreateTeamCommand struct {
+type CreateTeamRequest struct {
 	OwnerID int64
 	Name    string
 }
 
-type InviteMemberCommand struct {
+type InviteMemberRequest struct {
 	CallerID int64
 	TeamID   int64
 	UserID   int64
@@ -37,7 +37,7 @@ func NewTeamUseCase(teams TeamRepository, users UserRepository, tx TransactionMa
 	return &TeamUseCase{teams: teams, users: users, tx: tx}
 }
 
-func (uc *TeamUseCase) Create(ctx context.Context, cmd CreateTeamCommand) (*domain.Team, error) {
+func (uc *TeamUseCase) Create(ctx context.Context, cmd CreateTeamRequest) (*domain.Team, error) {
 	name := strings.TrimSpace(cmd.Name)
 	if name == "" {
 		return nil, domain.ErrValidation.WithDetails(map[string]string{"name": "поле обязательно"})
@@ -69,7 +69,7 @@ func (uc *TeamUseCase) List(ctx context.Context, userID int64) ([]domain.TeamWit
 	return uc.teams.ListByUser(ctx, userID)
 }
 
-func (uc *TeamUseCase) Invite(ctx context.Context, cmd InviteMemberCommand) (*TeamMember, error) {
+func (uc *TeamUseCase) Invite(ctx context.Context, cmd InviteMemberRequest) (*TeamMember, error) {
 	if cmd.UserID <= 0 {
 		return nil, domain.ErrValidation.WithDetails(map[string]string{"user_id": "должен быть больше 0"})
 	}

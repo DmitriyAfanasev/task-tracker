@@ -41,13 +41,12 @@ type CommentListResult struct {
 	Offset   int                  `json:"offset"`
 }
 
-type CreateTaskCommand struct {
+type CreateTaskRequest struct {
 	UserID      int64
 	TeamID      int64
 	Title       string
 	Description *string
 	Status      *domain.TaskStatus
-	AssigneeID  *int64
 }
 
 type ListTasksQuery struct {
@@ -59,7 +58,7 @@ type ListTasksQuery struct {
 	Offset     int
 }
 
-type UpdateTaskCommand struct {
+type UpdateTaskRequest struct {
 	UserID          int64
 	TaskID          int64
 	Title           *string
@@ -69,7 +68,7 @@ type UpdateTaskCommand struct {
 	ExpectedVersion *int64
 }
 
-type AddCommentCommand struct {
+type AddCommentRequest struct {
 	UserID  int64
 	TaskID  int64
 	Content string
@@ -109,7 +108,7 @@ func NewTaskUseCase(
 	}
 }
 
-func (uc *TaskUseCase) Create(ctx context.Context, cmd CreateTaskCommand) (*domain.Task, error) {
+func (uc *TaskUseCase) Create(ctx context.Context, cmd CreateTaskRequest) (*domain.Task, error) {
 	details := make(map[string]string)
 
 	title := strings.TrimSpace(cmd.Title)
@@ -138,9 +137,6 @@ func (uc *TaskUseCase) Create(ctx context.Context, cmd CreateTaskCommand) (*doma
 		}
 	}
 
-	if cmd.AssigneeID != nil && *cmd.AssigneeID <= 0 {
-		details["assignee_id"] = "должен быть больше 0"
-	}
 	if len(details) > 0 {
 		return nil, domain.ErrValidation.WithDetails(details)
 	}
@@ -148,25 +144,16 @@ func (uc *TaskUseCase) Create(ctx context.Context, cmd CreateTaskCommand) (*doma
 	if _, err := uc.teams.Membership(ctx, cmd.TeamID, cmd.UserID); err != nil {
 		return nil, err
 	}
-	if cmd.AssigneeID != nil {
-		if _, err := uc.teams.Membership(ctx, cmd.TeamID, *cmd.AssigneeID); err != nil {
-			if errors.Is(err, domain.ErrTeamNotFound) {
-				return nil, domain.ErrValidation.WithDetails(map[string]string{
-					"assignee_id": "исполнитель должен быть участником команды",
-				})
-			}
-			return nil, err
-		}
-	}
 
 	now := time.Now().UTC()
+	assigneeID := cmd.UserID
 	task := &domain.Task{
 		TeamID:      cmd.TeamID,
 		Title:       title,
 		Description: description,
 		Status:      status,
 		CreatedBy:   cmd.UserID,
-		AssigneeID:  cmd.AssigneeID,
+		AssigneeID:  &assigneeID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		Version:     1,
@@ -236,7 +223,7 @@ func (uc *TaskUseCase) List(ctx context.Context, query ListTasksQuery) (*TaskLis
 	return &result, nil
 }
 
-func (uc *TaskUseCase) Update(ctx context.Context, cmd UpdateTaskCommand) (*domain.Task, error) {
+func (uc *TaskUseCase) Update(ctx context.Context, cmd UpdateTaskRequest) (*domain.Task, error) {
 	if err := validateTaskUpdate(cmd); err != nil {
 		return nil, err
 	}
@@ -355,7 +342,7 @@ func (uc *TaskUseCase) History(ctx context.Context, userID, taskID int64) ([]dom
 	return uc.history.List(ctx, taskID)
 }
 
-func (uc *TaskUseCase) AddComment(ctx context.Context, cmd AddCommentCommand) (*domain.TaskComment, error) {
+func (uc *TaskUseCase) AddComment(ctx context.Context, cmd AddCommentRequest) (*domain.TaskComment, error) {
 	content := strings.TrimSpace(cmd.Content)
 	if content == "" {
 		return nil, domain.ErrValidation.WithDetails(map[string]string{"content": "поле обязательно"})
@@ -436,7 +423,7 @@ func taskFilterKey(status *domain.TaskStatus, assigneeID *int64, limit, offset i
 	return fmt.Sprintf("status=%s;assignee=%s;limit=%d;offset=%d", statusValue, assigneeValue, limit, offset)
 }
 
-func validateTaskUpdate(cmd UpdateTaskCommand) error {
+func validateTaskUpdate(cmd UpdateTaskRequest) error {
 	details := make(map[string]string)
 
 	if cmd.TaskID <= 0 {

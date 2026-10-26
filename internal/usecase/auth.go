@@ -11,13 +11,13 @@ import (
 	"secunda/internal/domain"
 )
 
-type RegisterCommand struct {
+type RegisterRequest struct {
 	Email    string
 	Password string
 	Name     string
 }
 
-type LoginCommand struct {
+type LoginRequest struct {
 	Email    string
 	Password string
 }
@@ -29,26 +29,16 @@ type AuthResult struct {
 }
 
 type AuthUseCase struct {
-	users     UserRepository
-	tokens    TokenIssuer
-	hasher    PasswordHasher
-	dummyHash string
+	users  UserRepository
+	tokens TokenIssuer
+	hasher PasswordHasher
 }
 
 func NewAuthUseCase(users UserRepository, tokens TokenIssuer, hasher PasswordHasher) *AuthUseCase {
-	// Хеш-заглушка выравнивает время ответа для несуществующего email,
-	// чтобы нельзя было перебором определить зарегистрированных пользователей.
-	dummyHash, _ := hasher.Hash("timing-equalization-dummy-password")
-
-	return &AuthUseCase{
-		users:     users,
-		tokens:    tokens,
-		hasher:    hasher,
-		dummyHash: dummyHash,
-	}
+	return &AuthUseCase{users: users, tokens: tokens, hasher: hasher}
 }
 
-func (uc *AuthUseCase) Register(ctx context.Context, cmd RegisterCommand) (*AuthResult, error) {
+func (uc *AuthUseCase) Register(ctx context.Context, cmd RegisterRequest) (*AuthResult, error) {
 	email, emailErr := normalizeEmail(cmd.Email)
 	name := strings.TrimSpace(cmd.Name)
 
@@ -89,7 +79,7 @@ func (uc *AuthUseCase) Register(ctx context.Context, cmd RegisterCommand) (*Auth
 	return uc.issueToken(user)
 }
 
-func (uc *AuthUseCase) Login(ctx context.Context, cmd LoginCommand) (*AuthResult, error) {
+func (uc *AuthUseCase) Login(ctx context.Context, cmd LoginRequest) (*AuthResult, error) {
 	email, err := normalizeEmail(cmd.Email)
 	if err != nil || cmd.Password == "" {
 		return nil, domain.ErrInvalidCreds
@@ -98,7 +88,7 @@ func (uc *AuthUseCase) Login(ctx context.Context, cmd LoginCommand) (*AuthResult
 	user, err := uc.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
-			uc.hasher.Compare(uc.dummyHash, cmd.Password)
+			_, _ = uc.hasher.Hash("timing-equalization-dummy-password")
 			return nil, domain.ErrInvalidCreds
 		}
 		return nil, err

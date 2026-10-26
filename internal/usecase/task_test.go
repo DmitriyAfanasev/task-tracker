@@ -122,7 +122,7 @@ func TestUpdateTaskBumpsVersionAndWritesHistory(t *testing.T) {
 	status := domain.TaskStatusInProgress
 	version := int64(1)
 
-	task, err := uc.Update(context.Background(), UpdateTaskCommand{
+	task, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          2,
 		TaskID:          10,
 		Status:          &status,
@@ -150,7 +150,7 @@ func TestAssigneeCannotEditTitle(t *testing.T) {
 	title := "Hacked"
 	version := int64(1)
 
-	_, err := uc.Update(context.Background(), UpdateTaskCommand{
+	_, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          2,
 		TaskID:          10,
 		Title:           &title,
@@ -169,7 +169,7 @@ func TestOwnerCanEditTask(t *testing.T) {
 	title := "Renamed"
 	version := int64(1)
 
-	task, err := uc.Update(context.Background(), UpdateTaskCommand{
+	task, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          1,
 		TaskID:          10,
 		Title:           &title,
@@ -191,7 +191,7 @@ func TestStaleVersionConflicts(t *testing.T) {
 	status := domain.TaskStatusInProgress
 	version := int64(99)
 
-	_, err := uc.Update(context.Background(), UpdateTaskCommand{
+	_, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          1,
 		TaskID:          10,
 		Status:          &status,
@@ -209,7 +209,7 @@ func TestUpdateRequiresVersion(t *testing.T) {
 	uc, tasks, _, _ := taskFixture(domain.RoleOwner)
 	status := domain.TaskStatusInProgress
 
-	_, err := uc.Update(context.Background(), UpdateTaskCommand{
+	_, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID: 1,
 		TaskID: 10,
 		Status: &status,
@@ -227,7 +227,7 @@ func TestNoopUpdateDoesNotBumpVersion(t *testing.T) {
 	status := domain.TaskStatusTodo
 	version := int64(1)
 
-	task, err := uc.Update(context.Background(), UpdateTaskCommand{
+	task, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          1,
 		TaskID:          10,
 		Status:          &status,

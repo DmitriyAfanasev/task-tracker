@@ -75,7 +75,7 @@ func newFakeAuthUC() (*AuthUseCase, *fakeUserRepo, *fakeTokenIssuer, *fakeHasher
 
 func TestRegisterRejectsEmptyEmail(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Password: "password123",
 		Name:     "Иван",
 	})
@@ -86,7 +86,7 @@ func TestRegisterRejectsEmptyEmail(t *testing.T) {
 
 func TestRegisterRejectsInvalidEmail(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "not-an-email",
 		Password: "password123",
 		Name:     "Иван",
@@ -98,7 +98,7 @@ func TestRegisterRejectsInvalidEmail(t *testing.T) {
 
 func TestRegisterRejectsTooLongEmail(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    string(make([]byte, 256)) + "@a.co",
 		Password: "password123",
 		Name:     "Иван",
@@ -110,7 +110,7 @@ func TestRegisterRejectsTooLongEmail(t *testing.T) {
 
 func TestRegisterRejectsEmptyName(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "ivan@example.com",
 		Password: "password123",
 		Name:     "",
@@ -122,7 +122,7 @@ func TestRegisterRejectsEmptyName(t *testing.T) {
 
 func TestRegisterRejectsLongName(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "ivan@example.com",
 		Password: "password123",
 		Name:     string(make([]rune, 101)),
@@ -134,7 +134,7 @@ func TestRegisterRejectsLongName(t *testing.T) {
 
 func TestRegisterRejectsShortPassword(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "ivan@example.com",
 		Password: "short",
 		Name:     "Иван",
@@ -146,7 +146,7 @@ func TestRegisterRejectsShortPassword(t *testing.T) {
 
 func TestRegisterRejectsLongPassword(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "ivan@example.com",
 		Password: string(make([]byte, 73)),
 		Name:     "Иван",
@@ -158,7 +158,7 @@ func TestRegisterRejectsLongPassword(t *testing.T) {
 
 func TestRegisterRejectsMultipleValidationErrors(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "bad",
 		Password: "123",
 		Name:     "",
@@ -175,7 +175,7 @@ func TestRegisterRejectsMultipleValidationErrors(t *testing.T) {
 func TestRegisterNormalizesEmail(t *testing.T) {
 	uc, users, tokens, _ := newFakeAuthUC()
 
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "  Ivan@Example.COM  ",
 		Password: "password123",
 		Name:     "Иван",
@@ -195,7 +195,7 @@ func TestRegisterPersistsUserAndIssuesToken(t *testing.T) {
 	uc, users, _, _ := newFakeAuthUC()
 	users.createErr = nil
 
-	result, err := uc.Register(context.Background(), RegisterCommand{
+	result, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "ivan@example.com",
 		Password: "password123",
 		Name:     "Иван",
@@ -221,7 +221,7 @@ func TestRegisterPropagatesUserCreateError(t *testing.T) {
 	uc, users, _, _ := newFakeAuthUC()
 	users.createErr = domain.ErrEmailTaken
 
-	_, err := uc.Register(context.Background(), RegisterCommand{
+	_, err := uc.Register(context.Background(), RegisterRequest{
 		Email:    "ivan@example.com",
 		Password: "password123",
 		Name:     "Иван",
@@ -235,7 +235,7 @@ func TestRegisterPropagatesUserCreateError(t *testing.T) {
 
 func TestLoginRejectsEmptyEmail(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Login(context.Background(), LoginCommand{
+	_, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "",
 		Password: "password123",
 	})
@@ -246,7 +246,7 @@ func TestLoginRejectsEmptyEmail(t *testing.T) {
 
 func TestLoginRejectsInvalidEmail(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Login(context.Background(), LoginCommand{
+	_, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "not-an-email",
 		Password: "password123",
 	})
@@ -257,7 +257,7 @@ func TestLoginRejectsInvalidEmail(t *testing.T) {
 
 func TestLoginRejectsEmptyPassword(t *testing.T) {
 	uc, _, _, _ := newFakeAuthUC()
-	_, err := uc.Login(context.Background(), LoginCommand{
+	_, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "ivan@example.com",
 		Password: "",
 	})
@@ -270,7 +270,7 @@ func TestLoginReturnsInvalidCredsForUnknownUser(t *testing.T) {
 	uc, users, _, _ := newFakeAuthUC()
 	users.byErr = domain.ErrUserNotFound
 
-	_, err := uc.Login(context.Background(), LoginCommand{
+	_, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "unknown@example.com",
 		Password: "password123",
 	})
@@ -284,7 +284,7 @@ func TestLoginReturnsInvalidCredsForWrongPassword(t *testing.T) {
 	users.user = &domain.User{ID: 1, Email: "ivan@example.com", PasswordHash: "$2a$12$valid"}
 	hasher.compare = false
 
-	_, err := uc.Login(context.Background(), LoginCommand{
+	_, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "ivan@example.com",
 		Password: "wrong",
 	})
@@ -298,7 +298,7 @@ func TestLoginSucceedsWithCorrectCredentials(t *testing.T) {
 	users.user = &domain.User{ID: 1, Email: "ivan@example.com", PasswordHash: "$2a$12$valid"}
 	hasher.compare = true
 
-	result, err := uc.Login(context.Background(), LoginCommand{
+	result, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "ivan@example.com",
 		Password: "correct",
 	})
@@ -318,7 +318,7 @@ func TestLoginNormalizesEmail(t *testing.T) {
 	users.user = &domain.User{ID: 1, Email: "ivan@example.com", PasswordHash: "$2a$12$valid"}
 	hasher.compare = true
 
-	result, err := uc.Login(context.Background(), LoginCommand{
+	result, err := uc.Login(context.Background(), LoginRequest{
 		Email:    "  Ivan@EXAMPLE.COM  ",
 		Password: "correct",
 	})

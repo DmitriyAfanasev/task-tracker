@@ -206,8 +206,8 @@ paths:
       operationId: createTask
       summary: Создание задачи
       description: |
-        Любой участник команды может создать задачу. Создателем считается
-        текущий пользователь. Исполнитель должен быть участником этой же команды.
+        Любой участник команды может создать задачу. Создателем и исполнителем
+        автоматически считается текущий пользователь (из JWT).
       requestBody:
         required: true
         content:
@@ -749,12 +749,6 @@ components:
           example: Собрать changelog и проверить миграции
         status:
           $ref: '#/components/schemas/TaskStatus'
-        assignee_id:
-          type: integer
-          format: int64
-          nullable: true
-          minimum: 1
-          example: 2
 
     UpdateTaskRequest:
       type: object

@@ -9,12 +9,12 @@ import (
 )
 
 type fakeTeamRepo struct {
-	team       *domain.Team
-	membership domain.Role
+	team          *domain.Team
+	membership    domain.Role
 	membershipErr error
-	createErr  error
-	addMemberErr error
-	inviteCall int
+	createErr     error
+	addMemberErr  error
+	inviteCall    int
 }
 
 func (f *fakeTeamRepo) Create(_ context.Context, team *domain.Team) error {
@@ -41,7 +41,7 @@ func (f *fakeTeamRepo) AddMember(_ context.Context, _, _ int64, _ domain.Role) e
 }
 
 type fakeUserRepoForInvite struct {
-	exists  bool
+	exists   bool
 	notFound bool
 }
 
@@ -74,7 +74,7 @@ func newFakeTeamUC(role domain.Role) (*TeamUseCase, *fakeTeamRepo, *fakeUserRepo
 
 func TestCreateTeamRejectsEmptyName(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Create(context.Background(), CreateTeamCommand{
+	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "",
 	})
@@ -85,7 +85,7 @@ func TestCreateTeamRejectsEmptyName(t *testing.T) {
 
 func TestCreateTeamRejectsLongName(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Create(context.Background(), CreateTeamCommand{
+	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    string(make([]rune, 101)),
 	})
@@ -96,7 +96,7 @@ func TestCreateTeamRejectsLongName(t *testing.T) {
 
 func TestCreateTeamTrimsWhitespace(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	team, err := uc.Create(context.Background(), CreateTeamCommand{
+	team, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "  My Team  ",
 	})
@@ -110,7 +110,7 @@ func TestCreateTeamTrimsWhitespace(t *testing.T) {
 
 func TestCreateTeamSetsCreatedBy(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	team, err := uc.Create(context.Background(), CreateTeamCommand{
+	team, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 42,
 		Name:    "Test Team",
 	})
@@ -124,7 +124,7 @@ func TestCreateTeamSetsCreatedBy(t *testing.T) {
 
 func TestCreateTeamAddsOwnerAsMember(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Create(context.Background(), CreateTeamCommand{
+	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "Team",
 	})
@@ -140,7 +140,7 @@ func TestCreateTeamPropagatesCreateError(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
 	teams.createErr = domain.ErrInternal
 
-	_, err := uc.Create(context.Background(), CreateTeamCommand{
+	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "Team",
 	})
@@ -153,7 +153,7 @@ func TestCreateTeamPropagatesAddMemberError(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
 	teams.addMemberErr = domain.ErrInternal
 
-	_, err := uc.Create(context.Background(), CreateTeamCommand{
+	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "Team",
 	})
@@ -166,7 +166,7 @@ func TestCreateTeamPropagatesAddMemberError(t *testing.T) {
 
 func TestInviteRejectsZeroUserID(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   0,
@@ -179,7 +179,7 @@ func TestInviteRejectsZeroUserID(t *testing.T) {
 
 func TestInviteRejectsNegativeUserID(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   -1,
@@ -192,7 +192,7 @@ func TestInviteRejectsNegativeUserID(t *testing.T) {
 
 func TestInviteRejectsOwnerRole(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -205,7 +205,7 @@ func TestInviteRejectsOwnerRole(t *testing.T) {
 
 func TestInviteRejectsInvalidRole(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -218,7 +218,7 @@ func TestInviteRejectsInvalidRole(t *testing.T) {
 
 func TestInviteRejectsMemberAsCaller(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleMember)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -231,7 +231,7 @@ func TestInviteRejectsMemberAsCaller(t *testing.T) {
 
 func TestInviteRejectsAdminInvitingAdmin(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleAdmin)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -244,7 +244,7 @@ func TestInviteRejectsAdminInvitingAdmin(t *testing.T) {
 
 func TestInviteRejectsAdminInvitingOwner(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleAdmin)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -257,7 +257,7 @@ func TestInviteRejectsAdminInvitingOwner(t *testing.T) {
 
 func TestInviteSucceedsForOwnerInvitingAdmin(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -273,7 +273,7 @@ func TestInviteSucceedsForOwnerInvitingAdmin(t *testing.T) {
 
 func TestInviteSucceedsForOwnerInvitingMember(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -289,7 +289,7 @@ func TestInviteSucceedsForOwnerInvitingMember(t *testing.T) {
 
 func TestInviteSucceedsForAdminInvitingMember(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleAdmin)
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -307,7 +307,7 @@ func TestInvitePropagatesMembershipError(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
 	teams.membershipErr = domain.ErrInternal
 
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -322,7 +322,7 @@ func TestInvitePropagatesUserNotFoundError(t *testing.T) {
 	uc, _, users := newFakeTeamUC(domain.RoleOwner)
 	users.exists = false
 
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   999,
@@ -337,7 +337,7 @@ func TestInvitePropagatesAddMemberError(t *testing.T) {
 	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
 	teams.addMemberErr = domain.ErrAlreadyMember
 
-	_, err := uc.Invite(context.Background(), InviteMemberCommand{
+	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
@@ -350,7 +350,7 @@ func TestInvitePropagatesAddMemberError(t *testing.T) {
 
 func TestInviteReturnsTeamMember(t *testing.T) {
 	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
-	member, err := uc.Invite(context.Background(), InviteMemberCommand{
+	member, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   42,
 		UserID:   99,

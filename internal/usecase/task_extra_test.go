@@ -14,7 +14,7 @@ type countingTeamRepo struct {
 	membershipFn func(ctx context.Context, teamID, userID int64) (domain.Role, error)
 }
 
-func (c *countingTeamRepo) Create(context.Context, *domain.Team) error              { return nil }
+func (c *countingTeamRepo) Create(context.Context, *domain.Team) error { return nil }
 func (c *countingTeamRepo) ListByUser(context.Context, int64) ([]domain.TeamWithRole, error) {
 	return nil, nil
 }
@@ -30,7 +30,7 @@ func (c *countingTeamRepo) AddMember(context.Context, int64, int64, domain.Role)
 
 func TestCreateTaskRejectsZeroTeamID(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		Title:  "Task",
 	})
@@ -41,7 +41,7 @@ func TestCreateTaskRejectsZeroTeamID(t *testing.T) {
 
 func TestCreateTaskRejectsEmptyTitle(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  "",
@@ -53,7 +53,7 @@ func TestCreateTaskRejectsEmptyTitle(t *testing.T) {
 
 func TestCreateTaskRejectsLongTitle(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  string(make([]rune, 256)),
@@ -66,7 +66,7 @@ func TestCreateTaskRejectsLongTitle(t *testing.T) {
 func TestCreateTaskRejectsLongDescription(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
 	long := string(make([]rune, 5001))
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID:      1,
 		TeamID:      1,
 		Title:       "Task",
@@ -80,7 +80,7 @@ func TestCreateTaskRejectsLongDescription(t *testing.T) {
 func TestCreateTaskRejectsInvalidStatus(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
 	status := domain.TaskStatus("invalid")
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  "Task",
@@ -91,38 +91,10 @@ func TestCreateTaskRejectsInvalidStatus(t *testing.T) {
 	}
 }
 
-func TestCreateTaskRejectsZeroAssigneeID(t *testing.T) {
-	uc, _, _, _ := taskFixture(domain.RoleMember)
-	assignee := int64(0)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
-		UserID:     1,
-		TeamID:     1,
-		Title:      "Task",
-		AssigneeID: &assignee,
-	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
-}
-
-func TestCreateTaskRejectsNegativeAssigneeID(t *testing.T) {
-	uc, _, _, _ := taskFixture(domain.RoleMember)
-	assignee := int64(-1)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
-		UserID:     1,
-		TeamID:     1,
-		Title:      "Task",
-		AssigneeID: &assignee,
-	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
-}
-
 func TestCreateTaskChecksTeamMembership(t *testing.T) {
 	repo := &fakeTeamRepository{role: domain.Role("none"), membershipErr: domain.ErrForbidden}
 	uc := NewTaskUseCase(&fakeTaskRepository{}, &fakeHistoryRepository{}, &fakeCommentRepository{}, repo, &fakeTaskCache{}, immediateTx{})
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  "Task",
@@ -132,34 +104,9 @@ func TestCreateTaskChecksTeamMembership(t *testing.T) {
 	}
 }
 
-func TestCreateTaskChecksAssigneeMembership(t *testing.T) {
-	// Two membership checks: caller first, then assignee.
-	// Fail only on the second (assignee) check.
-	calls := 0
-	countingRepo := &countingTeamRepo{role: domain.RoleMember}
-	countingRepo.membershipFn = func(ctx context.Context, teamID, userID int64) (domain.Role, error) {
-		calls++
-		if calls == 1 {
-			return domain.RoleMember, nil
-		}
-		return domain.RoleMember, domain.ErrTeamNotFound
-	}
-	uc := NewTaskUseCase(&fakeTaskRepository{}, &fakeHistoryRepository{}, &fakeCommentRepository{}, countingRepo, &fakeTaskCache{}, immediateTx{})
-	assignee := int64(999)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
-		UserID:     1,
-		TeamID:     1,
-		Title:      "Task",
-		AssigneeID: &assignee,
-	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
-}
-
 func TestCreateTaskSetsDefaultStatus(t *testing.T) {
 	uc, tasks, history, cache := taskFixture(domain.RoleMember)
-	task, err := uc.Create(context.Background(), CreateTaskCommand{
+	task, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  "New Task",
@@ -187,7 +134,7 @@ func TestCreateTaskSetsDefaultStatus(t *testing.T) {
 func TestCreateTaskSetsClosedAtForDoneStatus(t *testing.T) {
 	uc, tasks, _, _ := taskFixture(domain.RoleMember)
 	status := domain.TaskStatusDone
-	task, err := uc.Create(context.Background(), CreateTaskCommand{
+	task, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  "Done Task",
@@ -204,7 +151,7 @@ func TestCreateTaskSetsClosedAtForDoneStatus(t *testing.T) {
 
 func TestCreateTaskTrimsTitle(t *testing.T) {
 	uc, tasks, _, _ := taskFixture(domain.RoleMember)
-	_, err := uc.Create(context.Background(), CreateTaskCommand{
+	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
 		Title:  "  Trimmed  ",
@@ -283,7 +230,7 @@ func TestHistoryChecksTeamMembership(t *testing.T) {
 
 func TestAddCommentRejectsEmptyContent(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
-	_, err := uc.AddComment(context.Background(), AddCommentCommand{
+	_, err := uc.AddComment(context.Background(), AddCommentRequest{
 		UserID:  1,
 		TaskID:  10,
 		Content: "",
@@ -296,7 +243,7 @@ func TestAddCommentRejectsEmptyContent(t *testing.T) {
 func TestAddCommentRejectsLongContent(t *testing.T) {
 	uc, _, _, _ := taskFixture(domain.RoleMember)
 	long := string(make([]rune, 5001))
-	_, err := uc.AddComment(context.Background(), AddCommentCommand{
+	_, err := uc.AddComment(context.Background(), AddCommentRequest{
 		UserID:  1,
 		TaskID:  10,
 		Content: long,
@@ -309,7 +256,7 @@ func TestAddCommentRejectsLongContent(t *testing.T) {
 func TestAddCommentChecksTeamMembership(t *testing.T) {
 	repo := &fakeTeamRepository{role: domain.RoleMember, membershipErr: domain.ErrForbidden}
 	uc := NewTaskUseCase(&fakeTaskRepository{}, &fakeHistoryRepository{}, &fakeCommentRepository{}, repo, &fakeTaskCache{}, immediateTx{})
-	_, err := uc.AddComment(context.Background(), AddCommentCommand{
+	_, err := uc.AddComment(context.Background(), AddCommentRequest{
 		UserID:  1,
 		TaskID:  10,
 		Content: "comment",
