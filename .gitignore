@@ -1,0 +1,10 @@
+.env
+bin/
+tmp/
+coverage.out
+*.log
+.idea/
+.vscode/
+
+# Исходное ТЗ
+redirect.pdf
