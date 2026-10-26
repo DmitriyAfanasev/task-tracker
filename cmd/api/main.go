@@ -61,7 +61,10 @@ func run() error {
 	teamUseCase := usecase.NewTeamUseCase(teams, users)
 
 	handler := httpapi.NewHandler(authUseCase, teamUseCase)
-	router := httpapi.NewRouter(handler, tokens, db, logger)
+	router, err := httpapi.NewRouter(handler, tokens, db, logger)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

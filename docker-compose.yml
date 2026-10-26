@@ -43,6 +43,9 @@ services:
       context: .
     env_file:
       - .env
+    environment:
+      # DSN собирается из тех же переменных, что и MySQL, — без дублирования пароля.
+      DB_DSN: "${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE}?parseTime=true&loc=UTC&charset=utf8mb4"
     ports:
       - "${APP_HOST_PORT:-8080}:8080"
     depends_on:

@@ -85,7 +85,7 @@ make run
 | `APP_ENV` | `local` | Окружение |
 | `HTTP_ADDR` | `:8080` | Адрес HTTP-сервера |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `DB_DSN` | — (обязательно) | DSN MySQL, обязательно `parseTime=true&loc=UTC` |
+| `DB_DSN` | собирается автоматически | DSN MySQL; compose и `make run` подставляют его сами. Для прямого `go run` задайте вручную, обязательно `parseTime=true&loc=UTC` |
 | `DB_MAX_OPEN_CONNS` | `25` | Пул соединений |
 | `DB_MAX_IDLE_CONNS` | `25` | Пул соединений |
 | `DB_CONN_MAX_LIFETIME` | `5m` | Время жизни соединения |
@@ -181,6 +181,8 @@ goose при старте (`AUTO_MIGRATE=true`). Новая миграция —
 ## Надёжность
 
 - создание команды и добавление owner выполняются в одной транзакции;
+- тело API-запроса ограничено 1 MiB;
+- список публичных операций вычисляется из OpenAPI-спеки, а не задаётся руками;
 - пул MySQL настроен, чтение конфигурации — из окружения;
 - graceful shutdown по `SIGINT`/`SIGTERM`;
 - структурированные JSON-логи (`slog`) с `request_id`;

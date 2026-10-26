@@ -64,10 +64,11 @@ func newRequestID() string {
 }
 
 // Authenticate проверяет Bearer-токен, кроме публичных операций.
+// Ключ publicPaths — "METHOD /path", набор строится из OpenAPI-спеки.
 func Authenticate(tokens TokenParser, publicPaths map[string]struct{}, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, public := publicPaths[routePath(r)]; public {
+			if _, public := publicPaths[r.Method+" "+routePath(r)]; public {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -103,6 +104,19 @@ func routePath(r *http.Request) string {
 		return routeCtx.RoutePath
 	}
 	return r.URL.Path
+}
+
+// LimitBody ограничивает размер тела запроса, чтобы нельзя было
+// отправить гигантский JSON и занять память.
+func LimitBody(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RequestLogger пишет структурированный лог по каждому запросу.

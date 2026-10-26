@@ -8,16 +8,29 @@ import (
 	"secunda/internal/usecase"
 )
 
+// AuthUseCase — порт HTTP-слоя: хендлер не зависит от конкретной реализации.
+type AuthUseCase interface {
+	Register(ctx context.Context, cmd usecase.RegisterCommand) (*usecase.AuthResult, error)
+	Login(ctx context.Context, cmd usecase.LoginCommand) (*usecase.AuthResult, error)
+}
+
+// TeamUseCase — порт HTTP-слоя для сценариев команд.
+type TeamUseCase interface {
+	Create(ctx context.Context, cmd usecase.CreateTeamCommand) (*domain.Team, error)
+	List(ctx context.Context, userID int64) ([]domain.TeamWithRole, error)
+	Invite(ctx context.Context, cmd usecase.InviteMemberCommand) (*usecase.TeamMember, error)
+}
+
 // Handler — тонкий адаптер между сгенерированным OpenAPI-контрактом и use case.
 // Здесь нет бизнес-правил: только вызов сценария и маппинг результата.
 type Handler struct {
-	auth  *usecase.AuthUseCase
-	teams *usecase.TeamUseCase
+	auth  AuthUseCase
+	teams TeamUseCase
 }
 
 var _ openapi.StrictServerInterface = (*Handler)(nil)
 
-func NewHandler(auth *usecase.AuthUseCase, teams *usecase.TeamUseCase) *Handler {
+func NewHandler(auth AuthUseCase, teams TeamUseCase) *Handler {
 	return &Handler{auth: auth, teams: teams}
 }
 

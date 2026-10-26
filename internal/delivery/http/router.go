@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jmoiron/sqlx"
@@ -15,14 +17,20 @@ import (
 	"secunda/internal/domain"
 )
 
-var publicPaths = map[string]struct{}{
-	"/register": {},
-	"/login":    {},
-}
+const maxRequestBodyBytes = 1 << 20 // 1 MiB
 
 // NewRouter собирает HTTP-слой: инфраструктурные middleware, health,
 // Swagger UI и сгенерированный по OpenAPI роутер с JWT-аутентификацией.
-func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logger) http.Handler {
+func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logger) (http.Handler, error) {
+	spec, err := openapi.GetSpec()
+	if err != nil {
+		return nil, fmt.Errorf("load openapi spec: %w", err)
+	}
+	specJSON, err := openapi.GetSpecJSON()
+	if err != nil {
+		return nil, fmt.Errorf("encode openapi spec: %w", err)
+	}
+
 	router := chi.NewRouter()
 	router.Use(RequestID)
 	router.Use(RequestLogger(log))
@@ -34,22 +42,18 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logg
 	})
 	router.Get("/readyz", readiness(db))
 
-	spec, err := openapi.GetSpecJSON()
-	if err != nil {
-		log.Error("cannot load embedded OpenAPI spec", "error", err)
-	}
 	router.Get("/swagger/doc.json", func(w http.ResponseWriter, _ *http.Request) {
-		if spec == nil {
-			http.Error(w, "openapi spec is unavailable", http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = w.Write(spec)
+		_, _ = w.Write(specJSON)
 	})
 	router.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json")))
 
 	strictHandler := openapi.NewStrictHandlerWithOptions(handler, nil, openapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			if isMaxBytesError(err) {
+				writeError(w, r, log, domain.ErrPayloadTooLarge.WithErr(err))
+				return
+			}
 			writeError(w, r, log, domain.ErrBadRequest.WithErr(err))
 		},
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -58,11 +62,35 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logg
 	})
 
 	apiRouter := chi.NewRouter()
-	apiRouter.Use(Authenticate(tokens, publicPaths, log))
+	apiRouter.Use(
+		LimitBody(maxRequestBodyBytes),
+		Authenticate(tokens, publicOperations(spec), log),
+	)
 	openapi.HandlerWithOptions(strictHandler, openapi.ChiServerOptions{BaseRouter: apiRouter})
 	router.Mount("/api/v1", apiRouter)
 
-	return router
+	return router, nil
+}
+
+// publicOperations вычисляет операции без security из OpenAPI-спеки.
+// Так список публичных эндпоинтов не может разойтись с контрактом.
+func publicOperations(spec *openapi3.T) map[string]struct{} {
+	public := make(map[string]struct{})
+	if spec == nil || spec.Paths == nil {
+		return public
+	}
+
+	for path, item := range spec.Paths.Map() {
+		if item == nil {
+			continue
+		}
+		for method, operation := range item.Operations() {
+			if operation.Security != nil && len(*operation.Security) == 0 {
+				public[method+" "+path] = struct{}{}
+			}
+		}
+	}
+	return public
 }
 
 func readiness(db *sqlx.DB) http.HandlerFunc {

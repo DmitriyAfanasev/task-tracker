@@ -1,17 +1,28 @@
 package domain
 
-import (
-	"fmt"
-	"net/http"
+import "fmt"
+
+// Kind — категория доменной ошибки. Транспорт сам решает,
+// какой HTTP-статус соответствует категории: домен не знает про HTTP.
+type Kind int
+
+const (
+	KindBadRequest Kind = iota + 1
+	KindPayloadTooLarge
+	KindUnauthorized
+	KindForbidden
+	KindNotFound
+	KindConflict
+	KindInternal
 )
 
-// Error — доменная ошибка с кодом для API и HTTP-статусом.
+// Error — доменная ошибка с машинным кодом и сообщением для пользователя.
 type Error struct {
-	Code       string
-	Message    string
-	HTTPStatus int
-	Details    map[string]string
-	Err        error
+	Kind    Kind
+	Code    string
+	Message string
+	Details map[string]string
+	Err     error
 }
 
 func (e *Error) Error() string {
@@ -37,22 +48,23 @@ func (e *Error) WithErr(err error) *Error {
 	return &cp
 }
 
-func newError(status int, code, message string) *Error {
-	return &Error{Code: code, Message: message, HTTPStatus: status}
+func newError(kind Kind, code, message string) *Error {
+	return &Error{Kind: kind, Code: code, Message: message}
 }
 
 var (
-	ErrBadRequest    = newError(http.StatusBadRequest, "bad_request", "некорректный запрос")
-	ErrValidation    = newError(http.StatusBadRequest, "validation_failed", "ошибка валидации")
-	ErrUnauthorized  = newError(http.StatusUnauthorized, "unauthorized", "требуется аутентификация")
-	ErrInvalidToken  = newError(http.StatusUnauthorized, "invalid_token", "недействительный токен")
-	ErrInvalidCreds  = newError(http.StatusUnauthorized, "invalid_credentials", "неверный email или пароль")
-	ErrForbidden     = newError(http.StatusForbidden, "forbidden", "недостаточно прав")
-	ErrNotFound      = newError(http.StatusNotFound, "not_found", "ресурс не найден")
-	ErrUserNotFound  = newError(http.StatusNotFound, "user_not_found", "пользователь не найден")
-	ErrTeamNotFound  = newError(http.StatusNotFound, "team_not_found", "команда не найдена")
-	ErrEmailTaken    = newError(http.StatusConflict, "email_taken", "пользователь с таким email уже существует")
-	ErrAlreadyMember = newError(http.StatusConflict, "already_member", "пользователь уже состоит в команде")
-	ErrInvalidRole   = newError(http.StatusBadRequest, "invalid_role", "роль должна быть admin или member")
-	ErrInternal      = newError(http.StatusInternalServerError, "internal_error", "внутренняя ошибка сервера")
+	ErrBadRequest      = newError(KindBadRequest, "bad_request", "некорректный запрос")
+	ErrPayloadTooLarge = newError(KindPayloadTooLarge, "payload_too_large", "тело запроса слишком большое")
+	ErrValidation      = newError(KindBadRequest, "validation_failed", "ошибка валидации")
+	ErrUnauthorized    = newError(KindUnauthorized, "unauthorized", "требуется аутентификация")
+	ErrInvalidToken    = newError(KindUnauthorized, "invalid_token", "недействительный токен")
+	ErrInvalidCreds    = newError(KindUnauthorized, "invalid_credentials", "неверный email или пароль")
+	ErrForbidden       = newError(KindForbidden, "forbidden", "недостаточно прав")
+	ErrNotFound        = newError(KindNotFound, "not_found", "ресурс не найден")
+	ErrUserNotFound    = newError(KindNotFound, "user_not_found", "пользователь не найден")
+	ErrTeamNotFound    = newError(KindNotFound, "team_not_found", "команда не найдена")
+	ErrEmailTaken      = newError(KindConflict, "email_taken", "пользователь с таким email уже существует")
+	ErrAlreadyMember   = newError(KindConflict, "already_member", "пользователь уже состоит в команде")
+	ErrInvalidRole     = newError(KindBadRequest, "invalid_role", "роль должна быть admin или member")
+	ErrInternal        = newError(KindInternal, "internal_error", "внутренняя ошибка сервера")
 )

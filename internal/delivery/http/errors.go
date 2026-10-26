@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 )
 
 // writeError приводит любую ошибку к единому формату ErrorResponse.
+// HTTP-статус выбирается здесь, а не в домене.
 func writeError(w http.ResponseWriter, r *http.Request, log *slog.Logger, err error) {
 	domainErr, ok := isDomainError(err)
 	if !ok {
@@ -20,7 +22,8 @@ func writeError(w http.ResponseWriter, r *http.Request, log *slog.Logger, err er
 		domainErr = domain.ErrInternal.WithErr(err)
 	}
 
-	if domainErr.HTTPStatus >= http.StatusInternalServerError {
+	status := statusForKind(domainErr.Kind)
+	if status >= http.StatusInternalServerError {
 		log.Error("request failed",
 			"error", domainErr,
 			"code", domainErr.Code,
@@ -38,7 +41,31 @@ func writeError(w http.ResponseWriter, r *http.Request, log *slog.Logger, err er
 		body.Details = &details
 	}
 
-	writeJSON(w, domainErr.HTTPStatus, openapi.ErrorResponse{Error: body})
+	writeJSON(w, status, openapi.ErrorResponse{Error: body})
+}
+
+func statusForKind(kind domain.Kind) int {
+	switch kind {
+	case domain.KindBadRequest:
+		return http.StatusBadRequest
+	case domain.KindPayloadTooLarge:
+		return http.StatusRequestEntityTooLarge
+	case domain.KindUnauthorized:
+		return http.StatusUnauthorized
+	case domain.KindForbidden:
+		return http.StatusForbidden
+	case domain.KindNotFound:
+		return http.StatusNotFound
+	case domain.KindConflict:
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func isMaxBytesError(err error) bool {
+	var maxBytesErr *http.MaxBytesError
+	return errors.As(err, &maxBytesErr)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
