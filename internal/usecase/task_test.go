@@ -68,7 +68,8 @@ func (f *fakeCommentRepository) List(context.Context, int64, int, int) ([]domain
 }
 
 type fakeTeamRepository struct {
-	role domain.Role
+	role          domain.Role
+	membershipErr error
 }
 
 func (f *fakeTeamRepository) Create(context.Context, *domain.Team) error { return nil }
@@ -76,7 +77,7 @@ func (f *fakeTeamRepository) ListByUser(context.Context, int64) ([]domain.TeamWi
 	return nil, nil
 }
 func (f *fakeTeamRepository) Membership(context.Context, int64, int64) (domain.Role, error) {
-	return f.role, nil
+	return f.role, f.membershipErr
 }
 func (f *fakeTeamRepository) AddMember(context.Context, int64, int64, domain.Role) error {
 	return nil
