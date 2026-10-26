@@ -1,11 +1,8 @@
 SHELL := /bin/sh
 
-.PHONY: .env up down logs ps run build test vet fmt openapigen
+.PHONY: up down logs ps run build test vet fmt openapigen migrate-up migrate-down
 
-.env:
-	cp .env.example .env
-
-up: .env
+up:
 	docker compose up --build -d
 
 down:
@@ -34,7 +31,8 @@ openapigen:
 		--config api/oapi-codegen.yaml \
 		api/openapi.yaml
 
-run: .env
+run:
+	@if [ ! -f .env ]; then echo "Error: .env not found. Copy .env.example to .env and edit it." >&2; exit 1; fi
 	@set -a; . ./.env; set +a; \
 	DB_DSN="$$MYSQL_USER:$$MYSQL_PASSWORD@tcp(127.0.0.1:$$MYSQL_HOST_PORT)/$$MYSQL_DATABASE?parseTime=true&loc=UTC&charset=utf8mb4" \
 	REDIS_ADDR="127.0.0.1:$$REDIS_HOST_PORT" \

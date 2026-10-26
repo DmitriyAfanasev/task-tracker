@@ -11,7 +11,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"secunda/internal/migrations"
+	"secunda/migrations"
 )
 
 // TestTeamStatsRepositoryIntegration запускается против настоящего MySQL 8.
