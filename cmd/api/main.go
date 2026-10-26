@@ -13,7 +13,6 @@ import (
 	"secunda/internal/adapter/mysql"
 	redisadapter "secunda/internal/adapter/redis"
 	httpapi "secunda/internal/delivery/http"
-	"secunda/internal/migrations"
 	"secunda/internal/platform/auth"
 	"secunda/internal/platform/config"
 	"secunda/internal/usecase"
@@ -46,12 +45,6 @@ func run() error {
 	defer func() { _ = db.Close() }()
 	logger.Info("connected to mysql")
 
-	if cfg.AutoMigrate {
-		if err := migrations.Up(db.DB, logger); err != nil {
-			return err
-		}
-	}
-
 	tokens := auth.NewJWTIssuer(cfg.JWTSecret, cfg.JWTTTL)
 	hasher := auth.NewBcryptHasher(cfg.BcryptCost)
 
@@ -82,8 +75,10 @@ func run() error {
 	taskUseCase := usecase.NewTaskUseCase(tasks, history, comments, teams, taskCache, txManager)
 
 	handler := httpapi.NewHandler(authUseCase, teamUseCase, statsUseCase, taskUseCase)
-	router, err := httpapi.NewRouter(handler, tokens, db, logger, httpapi.RouterOptions{
-		EnableSwagger: !cfg.IsProduction(),
+	router, err := httpapi.NewRouter(handler, tokens, db, redisClient, logger, httpapi.NewRouterOptions{
+		EnableSwagger:       !cfg.IsProduction(),
+		RateLimitGlobalRate: cfg.RateLimitGlobalRate,
+		RateLimitAuthRate:   cfg.RateLimitAuthRate,
 	})
 	if err != nil {
 		return err

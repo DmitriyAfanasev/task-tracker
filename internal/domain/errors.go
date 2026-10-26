@@ -14,6 +14,7 @@ const (
 	KindNotFound
 	KindConflict
 	KindInternal
+	KindRateLimit
 )
 
 // Error — доменная ошибка с машинным кодом и сообщением для пользователя.
@@ -79,4 +80,5 @@ var (
 	ErrTaskNotFound    = newError(KindNotFound, "task_not_found", "задача не найдена")
 	ErrVersionConflict = newError(KindConflict, "version_conflict", "задача была изменена другим пользователем")
 	ErrInternal        = newError(KindInternal, "internal_error", "внутренняя ошибка сервера")
+	ErrRateLimit       = newError(KindRateLimit, "rate_limit", "слишком много запросов, повторите позже")
 )

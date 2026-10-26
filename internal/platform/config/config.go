@@ -28,8 +28,9 @@ type Config struct {
 	JWTTTL     time.Duration
 	BcryptCost int
 
-	AutoMigrate     bool
-	ShutdownTimeout time.Duration
+	ShutdownTimeout     time.Duration
+	RateLimitGlobalRate string
+	RateLimitAuthRate   string
 }
 
 // Load читает конфигурацию из окружения. Секреты и DSN обязательны:
@@ -42,7 +43,6 @@ func Load() (*Config, error) {
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:     os.Getenv("REDIS_PASSWORD"),
 		JWTSecret:         os.Getenv("JWT_SECRET"),
-		AutoMigrate:       getBool("AUTO_MIGRATE", true),
 		DBMaxOpenConns:    getInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:    getInt("DB_MAX_IDLE_CONNS", 25),
 		RedisDB:           getInt("REDIS_DB", 0),
@@ -51,6 +51,8 @@ func Load() (*Config, error) {
 		CacheTTL:          getDuration("CACHE_TTL", 5*time.Minute),
 		JWTTTL:            getDuration("JWT_TTL", 24*time.Hour),
 		BcryptCost:        getInt("BCRYPT_COST", 12),
+		RateLimitGlobalRate: getEnv("RATE_LIMIT_GLOBAL", "100-M"),
+		RateLimitAuthRate:   getEnv("RATE_LIMIT_AUTH", "10-M"),
 	}
 
 	if strings.TrimSpace(cfg.DBDSN) == "" {
@@ -87,18 +89,6 @@ func getInt(key string, fallback int) int {
 		return fallback
 	}
 	v, err := strconv.Atoi(raw)
-	if err != nil {
-		return fallback
-	}
-	return v
-}
-
-func getBool(key string, fallback bool) bool {
-	raw, ok := os.LookupEnv(key)
-	if !ok || raw == "" {
-		return fallback
-	}
-	v, err := strconv.ParseBool(raw)
 	if err != nil {
 		return fallback
 	}

@@ -13,7 +13,7 @@ import (
 
 func TestSwaggerUIHasCanonicalURL(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router, err := NewRouter(nil, nil, nil, logger, RouterOptions{EnableSwagger: true})
+	router, err := NewRouter(nil, nil, nil, nil, logger, NewRouterOptions{EnableSwagger: true})
 	if err != nil {
 		t.Fatalf("NewRouter() error = %v", err)
 	}
@@ -60,7 +60,7 @@ func TestSwaggerUIHasCanonicalURL(t *testing.T) {
 
 func TestSwaggerIsDisabledWhenNotEnabled(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router, err := NewRouter(nil, nil, nil, logger, RouterOptions{EnableSwagger: false})
+	router, err := NewRouter(nil, nil, nil, nil, logger, NewRouterOptions{EnableSwagger: false})
 	if err != nil {
 		t.Fatalf("NewRouter() error = %v", err)
 	}

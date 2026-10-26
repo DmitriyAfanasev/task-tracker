@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
+
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"secunda/internal/delivery/http/openapi"
@@ -19,16 +21,22 @@ import (
 
 const maxRequestBodyBytes = 1 << 20 // 1 MiB
 
-// RouterOptions задаёт необязательные возможности HTTP-слоя.
-type RouterOptions struct {
+// NewRouterOptions задаёт необязательные возможности HTTP-слоя.
+type NewRouterOptions struct {
 	// EnableSwagger включает Swagger UI и /swagger/doc.json.
 	// В production выключается, чтобы не раскрывать контракт и UI.
 	EnableSwagger bool
+
+	// RateLimitGlobalRate — общий лимит для authenticated-запросов.
+	RateLimitGlobalRate string
+
+	// RateLimitAuthRate — строгий лимит для аутентификации.
+	RateLimitAuthRate string
 }
 
 // NewRouter собирает HTTP-слой: инфраструктурные middleware, health,
 // Swagger UI и сгенерированный по OpenAPI роутер с JWT-аутентификацией.
-func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logger, opts RouterOptions) (http.Handler, error) {
+func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, redisClient *redis.Client, log *slog.Logger, opts NewRouterOptions) (http.Handler, error) {
 	spec, err := openapi.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -73,6 +81,7 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logg
 	apiRouter := chi.NewRouter()
 	apiRouter.Use(
 		LimitBody(maxRequestBodyBytes),
+		rateLimitMiddleware(redisClient, opts.RateLimitGlobalRate, log),
 		Authenticate(tokens, publicOperations(spec), log),
 	)
 	openapi.HandlerWithOptions(strictHandler, openapi.ChiServerOptions{BaseRouter: apiRouter})

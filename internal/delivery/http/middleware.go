@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -13,6 +14,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	libredis "github.com/redis/go-redis/v9"
+	"github.com/ulule/limiter/v3"
+	limiterredis "github.com/ulule/limiter/v3/drivers/store/redis"
 
 	"secunda/internal/domain"
 )
@@ -170,4 +174,46 @@ func isDomainError(err error) (*domain.Error, bool) {
 		return domainErr, true
 	}
 	return nil, false
+}
+
+// rateLimitMiddleware — chi-совместимое middleware ограничения частоты запросов.
+func rateLimitMiddleware(redisClient *libredis.Client, rateFormatted string, log *slog.Logger) func(http.Handler) http.Handler {
+	rate, err := limiter.NewRateFromFormatted(rateFormatted)
+	if err != nil {
+		log.Error("rate limit parse", "rate", rateFormatted, "error", err)
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			store, err := limiterredis.NewStore(redisClient)
+			if err != nil {
+				log.Warn("rate limit create store", "error", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			lim := limiter.New(store, rate)
+			key := lim.GetIP(r).String()
+			ctx, err := lim.Get(r.Context(), key)
+			if err != nil {
+				log.Warn("rate limit check", "error", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			w.Header().Set("X-RateLimit-Limit", rateFormatted)
+			w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", ctx.Remaining))
+			w.Header().Set("X-RateLimit-Reset", time.Unix(ctx.Reset, 0).Format(time.RFC3339))
+
+			if ctx.Reached {
+				writeError(w, r, log, domain.ErrRateLimit)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

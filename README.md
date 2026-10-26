@@ -31,7 +31,7 @@ internal/adapter/mysql   — реализация портов поверх MySQ
 internal/adapter/redis   — реализация кеша поверх Redis
 internal/delivery/http   — HTTP-адаптер: OpenAPI, хендлеры, middleware
 internal/platform        — конфиг, JWT, bcrypt (инфраструктура)
-internal/migrations      — SQL-миграции, встроенные через embed
+migrations               — SQL-миграции, применяются через goose
 api/openapi.yaml         — единственный источник контракта
 ```
 
@@ -106,8 +106,9 @@ make run
 | `REDIS_PASSWORD` | — | Пароль Redis |
 | `REDIS_DB` | `0` | Номер БД Redis |
 | `CACHE_TTL` | `5m` | TTL кеша списка задач |
-| `AUTO_MIGRATE` | `true` | Применять миграции при старте |
 | `SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown |
+| `RATE_LIMIT_GLOBAL` | `100-M` | Лимит запросов на IP для authenticated-эндпоинтов (формат: `LIMIT-PERIOD`, где S/M/H/D = секунды/минуты/часы/дни) |
+| `RATE_LIMIT_AUTH` | `10-M` | Строгий лимит для аутентификации |
 
 ## Контракт и генерация
 
@@ -248,9 +249,14 @@ curl -s -X POST http://localhost:8080/api/v1/tasks/1/comments \
 
 ## Миграции
 
-SQL-файлы лежат в `internal/migrations`, встроены в бинарник и применяются
-goose при старте (`AUTO_MIGRATE=true`). Новая миграция — файл с префиксом
-`NNNNN_`, например `00002_tasks.sql`, с блоками `-- +goose Up` / `-- +goose Down`.
+SQL-файлы лежат в корне репозитория в `migrations/`, применяются вручную через goose:
+
+```bash
+make migrate-up    # применить все неприменённые миграции
+make migrate-down  # откатить последнюю миграцию
+```
+
+Новая миграция — файл с префиксом `NNNNN_`, например `00003_new_table.sql`, с блоками `-- +goose Up` / `-- +goose Down`.
 
 ## Надёжность
 
@@ -262,27 +268,16 @@ goose при старте (`AUTO_MIGRATE=true`). Новая миграция —
   продолжает работать через MySQL;
 - тело API-запроса ограничено 1 MiB;
 - список публичных операций вычисляется из OpenAPI-спеки, а не задаётся руками;
+- миграции применяются вручную через `make migrate-up` (goose);
 - пул MySQL настроен, чтение конфигурации — из окружения;
 - graceful shutdown по `SIGINT`/`SIGTERM`;
-- структурированные JSON-логи (`slog`) с `request_id`;
+- structured JSON-логи (`slog`) с `request_id`;
 - health/readiness-эндпоинты;
-- Swagger UI и спека всегда соответствуют сгенерированному коду.
+- Swagger UI и спека всегда соответствуют сгенерированному коду;
+- rate limiting по IP через Redis (ulule/limiter), заголовки `X-RateLimit-*` в ответе.
 
 ## Тесты
 
 ```bash
 make test
 ```
-
-Unit-тестами покрыты доменные правила ролей, права на поля задачи,
-конкурентное обновление (bump версии, `409`), маппинг ошибок, JWT и
-middleware. Интеграционный тест SQL-отчёта на реальном MySQL — этап 3.
-
-## Этапы
-
-- [x] **Этап 1.** Каркас onion-архитектуры, OpenAPI + генерация, MySQL,
-  миграции, JWT, регистрация/логин, команды и приглашения, Swagger, Docker.
-- [x] **Этап 2.** Задачи, история изменений, комментарии, optimistic locking,
-  Redis-кеш списка задач с инвалидацией.
-- [ ] **Этап 3.** SQL-отчёт `/teams/{team_id}/stats`, интеграционный тест
-  отчёта, README по всем сценариям.
