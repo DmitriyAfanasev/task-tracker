@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -61,6 +62,30 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for TaskStatus.
+const (
+	Cancelled  TaskStatus = "cancelled"
+	Done       TaskStatus = "done"
+	InProgress TaskStatus = "in_progress"
+	Todo       TaskStatus = "todo"
+)
+
+// Valid indicates whether the value is a known member of the TaskStatus enum.
+func (e TaskStatus) Valid() bool {
+	switch e {
+	case Cancelled:
+		return true
+	case Done:
+		return true
+	case InProgress:
+		return true
+	case Todo:
+		return true
+	default:
+		return false
+	}
+}
+
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
 	ExpiresAt time.Time `json:"expires_at"`
@@ -68,6 +93,28 @@ type AuthResponse struct {
 	// Token JWT access-токен
 	Token string `json:"token"`
 	User  User   `json:"user"`
+}
+
+// CreateTaskCommentRequest defines model for CreateTaskCommentRequest.
+type CreateTaskCommentRequest struct {
+	// Content Example: Проверил миграции, всё ок
+	Content string `json:"content"`
+}
+
+// CreateTaskRequest defines model for CreateTaskRequest.
+type CreateTaskRequest struct {
+	// AssigneeId Example: 2
+	AssigneeId *int64 `json:"assignee_id,omitempty"`
+
+	// Description Example: Собрать changelog и проверить миграции
+	Description *string     `json:"description,omitempty"`
+	Status      *TaskStatus `json:"status,omitempty"`
+
+	// TeamId Example: 1
+	TeamId int64 `json:"team_id"`
+
+	// Title Example: Подготовить релиз
+	Title string `json:"title"`
 }
 
 // CreateTeamRequest defines model for CreateTeamRequest.
@@ -131,6 +178,112 @@ type RegisterRequest struct {
 // Role defines model for Role.
 type Role string
 
+// Task defines model for Task.
+type Task struct {
+	// AssigneeId Example: 2
+	AssigneeId *int64     `json:"assignee_id"`
+	ClosedAt   *time.Time `json:"closed_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+
+	// CreatedBy Example: 1
+	CreatedBy int64 `json:"created_by"`
+
+	// Description Example: Собрать changelog
+	Description string `json:"description"`
+
+	// Id Example: 10
+	Id     int64      `json:"id"`
+	Status TaskStatus `json:"status"`
+
+	// TeamId Example: 1
+	TeamId int64 `json:"team_id"`
+
+	// Title Example: Подготовить релиз
+	Title     string    `json:"title"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Version Example: 3
+	Version int64 `json:"version"`
+}
+
+// TaskChange defines model for TaskChange.
+type TaskChange struct {
+	// Field Example: status
+	Field string `json:"field"`
+
+	// New Новое значение (строка, число или null)
+	New interface{} `json:"new"`
+
+	// Old Предыдущее значение (строка, число или null)
+	Old interface{} `json:"old"`
+}
+
+// TaskComment defines model for TaskComment.
+type TaskComment struct {
+	// Content Example: Проверил миграции, всё ок
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Id Example: 5
+	Id int64 `json:"id"`
+
+	// TaskId Example: 10
+	TaskId int64 `json:"task_id"`
+
+	// UserId Example: 2
+	UserId int64 `json:"user_id"`
+}
+
+// TaskCommentsResponse defines model for TaskCommentsResponse.
+type TaskCommentsResponse struct {
+	Items []TaskComment `json:"items"`
+
+	// Limit Example: 20
+	Limit int `json:"limit"`
+
+	// Offset Example: 0
+	Offset int `json:"offset"`
+
+	// Total Example: 3
+	Total int `json:"total"`
+}
+
+// TaskHistoryEntry defines model for TaskHistoryEntry.
+type TaskHistoryEntry struct {
+	// ChangedBy Example: 1
+	ChangedBy int64        `json:"changed_by"`
+	Changes   []TaskChange `json:"changes"`
+	CreatedAt time.Time    `json:"created_at"`
+
+	// Id Example: 100
+	Id int64 `json:"id"`
+
+	// TaskId Example: 10
+	TaskId int64 `json:"task_id"`
+}
+
+// TaskHistoryResponse defines model for TaskHistoryResponse.
+type TaskHistoryResponse struct {
+	Items []TaskHistoryEntry `json:"items"`
+}
+
+// TaskStatus defines model for TaskStatus.
+type TaskStatus string
+
+// TasksResponse defines model for TasksResponse.
+type TasksResponse struct {
+	Items []Task `json:"items"`
+
+	// Limit Example: 20
+	Limit int `json:"limit"`
+
+	// Offset Example: 0
+	Offset int `json:"offset"`
+
+	// Total Example: 42
+	Total int `json:"total"`
+}
+
 // Team defines model for Team.
 type Team struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -176,6 +329,18 @@ type TeamsResponse struct {
 	Items []TeamWithRole `json:"items"`
 }
 
+// UpdateTaskRequest defines model for UpdateTaskRequest.
+type UpdateTaskRequest struct {
+	// AssigneeId Новый исполнитель; 0 снимает исполнителя
+	AssigneeId  *int64      `json:"assignee_id,omitempty"`
+	Description *string     `json:"description,omitempty"`
+	Status      *TaskStatus `json:"status,omitempty"`
+	Title       *string     `json:"title,omitempty"`
+
+	// Version Ожидаемая версия задачи для optimistic locking
+	Version int64 `json:"version"`
+}
+
 // User defines model for User.
 type User struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -190,8 +355,26 @@ type User struct {
 	Name string `json:"name"`
 }
 
+// AssigneeIDQuery defines model for AssigneeIDQuery.
+type AssigneeIDQuery = int64
+
+// LimitQuery defines model for LimitQuery.
+type LimitQuery = int
+
+// OffsetQuery defines model for OffsetQuery.
+type OffsetQuery = int
+
+// TaskID defines model for TaskID.
+type TaskID = int64
+
+// TaskStatusQuery defines model for TaskStatusQuery.
+type TaskStatusQuery = TaskStatus
+
 // TeamID defines model for TeamID.
 type TeamID = int64
+
+// TeamIDQuery defines model for TeamIDQuery.
+type TeamIDQuery = int64
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -214,11 +397,47 @@ type PayloadTooLarge = ErrorResponse
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = ErrorResponse
 
+// ListTasksParams defines parameters for ListTasks.
+type ListTasksParams struct {
+	// TeamId Идентификатор команды
+	TeamId TeamIDQuery `form:"team_id" json:"team_id"`
+
+	// Status Фильтр по статусу
+	Status *TaskStatusQuery `form:"status,omitempty" json:"status,omitempty"`
+
+	// AssigneeId Фильтр по исполнителю
+	AssigneeId *AssigneeIDQuery `form:"assignee_id,omitempty" json:"assignee_id,omitempty"`
+
+	// Limit Размер страницы
+	Limit *LimitQuery `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Смещение
+	Offset *OffsetQuery `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListTaskCommentsParams defines parameters for ListTaskComments.
+type ListTaskCommentsParams struct {
+	// Limit Размер страницы
+	Limit *LimitQuery `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Смещение
+	Offset *OffsetQuery `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = RegisterRequest
+
+// CreateTaskJSONRequestBody defines body for CreateTask for application/json ContentType.
+type CreateTaskJSONRequestBody = CreateTaskRequest
+
+// UpdateTaskJSONRequestBody defines body for UpdateTask for application/json ContentType.
+type UpdateTaskJSONRequestBody = UpdateTaskRequest
+
+// AddTaskCommentJSONRequestBody defines body for AddTaskComment for application/json ContentType.
+type AddTaskCommentJSONRequestBody = CreateTaskCommentRequest
 
 // CreateTeamJSONRequestBody defines body for CreateTeam for application/json ContentType.
 type CreateTeamJSONRequestBody = CreateTeamRequest
@@ -234,6 +453,24 @@ type ServerInterface interface {
 	// Register Регистрация пользователя
 	// (POST /register)
 	Register(w http.ResponseWriter, r *http.Request)
+	// ListTasks Список задач команды
+	// (GET /tasks)
+	ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams)
+	// CreateTask Создание задачи
+	// (POST /tasks)
+	CreateTask(w http.ResponseWriter, r *http.Request)
+	// UpdateTask Обновление задачи
+	// (PUT /tasks/{id})
+	UpdateTask(w http.ResponseWriter, r *http.Request, id TaskID)
+	// ListTaskComments Комментарии задачи
+	// (GET /tasks/{id}/comments)
+	ListTaskComments(w http.ResponseWriter, r *http.Request, id TaskID, params ListTaskCommentsParams)
+	// AddTaskComment Добавление комментария
+	// (POST /tasks/{id}/comments)
+	AddTaskComment(w http.ResponseWriter, r *http.Request, id TaskID)
+	// ListTaskHistory История изменений задачи
+	// (GET /tasks/{id}/history)
+	ListTaskHistory(w http.ResponseWriter, r *http.Request, id TaskID)
 	// ListTeams Список команд пользователя
 	// (GET /teams)
 	ListTeams(w http.ResponseWriter, r *http.Request)
@@ -258,6 +495,42 @@ func (_ Unimplemented) Login(w http.ResponseWriter, r *http.Request) {
 // Register Регистрация пользователя
 // (POST /register)
 func (_ Unimplemented) Register(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListTasks Список задач команды
+// (GET /tasks)
+func (_ Unimplemented) ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateTask Создание задачи
+// (POST /tasks)
+func (_ Unimplemented) CreateTask(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateTask Обновление задачи
+// (PUT /tasks/{id})
+func (_ Unimplemented) UpdateTask(w http.ResponseWriter, r *http.Request, id TaskID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListTaskComments Комментарии задачи
+// (GET /tasks/{id}/comments)
+func (_ Unimplemented) ListTaskComments(w http.ResponseWriter, r *http.Request, id TaskID, params ListTaskCommentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// AddTaskComment Добавление комментария
+// (POST /tasks/{id}/comments)
+func (_ Unimplemented) AddTaskComment(w http.ResponseWriter, r *http.Request, id TaskID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListTaskHistory История изменений задачи
+// (GET /tasks/{id}/history)
+func (_ Unimplemented) ListTaskHistory(w http.ResponseWriter, r *http.Request, id TaskID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -307,6 +580,238 @@ func (siw *ServerInterfaceWrapper) Register(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Register(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTasks operation middleware
+func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTasksParams
+
+	// ------------- Required query parameter "team_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "team_id", r.URL.Query(), &params.TeamId, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "team_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "team_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "assignee_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "assignee_id", r.URL.Query(), &params.AssigneeId, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "assignee_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assignee_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTasks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTask operation middleware
+func (siw *ServerInterfaceWrapper) CreateTask(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTask(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTask operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TaskID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTask(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTaskComments operation middleware
+func (siw *ServerInterfaceWrapper) ListTaskComments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TaskID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTaskCommentsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTaskComments(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddTaskComment operation middleware
+func (siw *ServerInterfaceWrapper) AddTaskComment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TaskID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddTaskComment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTaskHistory operation middleware
+func (siw *ServerInterfaceWrapper) ListTaskHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TaskID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTaskHistory(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -498,6 +1003,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/teams/{id}/invite", wrapper.InviteMember)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tasks", wrapper.ListTasks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tasks", wrapper.CreateTask)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/tasks/{id}", wrapper.UpdateTask)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tasks/{id}/history", wrapper.ListTaskHistory)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tasks/{id}/comments", wrapper.ListTaskComments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tasks/{id}/comments", wrapper.AddTaskComment)
+	})
 
 	return r
 }
@@ -661,6 +1184,533 @@ func (response Register413JSONResponse) VisitRegisterResponse(w http.ResponseWri
 type Register500JSONResponse struct{ InternalErrorJSONResponse }
 
 func (response Register500JSONResponse) VisitRegisterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasksRequestObject struct {
+	Params ListTasksParams
+}
+
+type ListTasksResponseObject interface {
+	VisitListTasksResponse(w http.ResponseWriter) error
+}
+
+type ListTasks200JSONResponse TasksResponse
+
+func (response ListTasks200JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListTasks400JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListTasks401JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListTasks404JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTasks500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListTasks500JSONResponse) VisitListTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTaskRequestObject struct {
+	Body *CreateTaskJSONRequestBody
+}
+
+type CreateTaskResponseObject interface {
+	VisitCreateTaskResponse(w http.ResponseWriter) error
+}
+
+type CreateTask201JSONResponse Task
+
+func (response CreateTask201JSONResponse) VisitCreateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateTask400JSONResponse) VisitCreateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTask401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateTask401JSONResponse) VisitCreateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateTask404JSONResponse) VisitCreateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTask413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response CreateTask413JSONResponse) VisitCreateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTask500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response CreateTask500JSONResponse) VisitCreateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTaskRequestObject struct {
+	Id   TaskID `json:"id"`
+	Body *UpdateTaskJSONRequestBody
+}
+
+type UpdateTaskResponseObject interface {
+	VisitUpdateTaskResponse(w http.ResponseWriter) error
+}
+
+type UpdateTask200JSONResponse Task
+
+func (response UpdateTask200JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateTask400JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateTask401JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateTask403JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateTask404JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateTask409JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response UpdateTask413JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTask500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response UpdateTask500JSONResponse) VisitUpdateTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskCommentsRequestObject struct {
+	Id     TaskID `json:"id"`
+	Params ListTaskCommentsParams
+}
+
+type ListTaskCommentsResponseObject interface {
+	VisitListTaskCommentsResponse(w http.ResponseWriter) error
+}
+
+type ListTaskComments200JSONResponse TaskCommentsResponse
+
+func (response ListTaskComments200JSONResponse) VisitListTaskCommentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskComments400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListTaskComments400JSONResponse) VisitListTaskCommentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskComments401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListTaskComments401JSONResponse) VisitListTaskCommentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskComments404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListTaskComments404JSONResponse) VisitListTaskCommentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskComments500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListTaskComments500JSONResponse) VisitListTaskCommentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddTaskCommentRequestObject struct {
+	Id   TaskID `json:"id"`
+	Body *AddTaskCommentJSONRequestBody
+}
+
+type AddTaskCommentResponseObject interface {
+	VisitAddTaskCommentResponse(w http.ResponseWriter) error
+}
+
+type AddTaskComment201JSONResponse TaskComment
+
+func (response AddTaskComment201JSONResponse) VisitAddTaskCommentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddTaskComment400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response AddTaskComment400JSONResponse) VisitAddTaskCommentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddTaskComment401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddTaskComment401JSONResponse) VisitAddTaskCommentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddTaskComment404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AddTaskComment404JSONResponse) VisitAddTaskCommentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddTaskComment413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response AddTaskComment413JSONResponse) VisitAddTaskCommentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddTaskComment500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response AddTaskComment500JSONResponse) VisitAddTaskCommentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskHistoryRequestObject struct {
+	Id TaskID `json:"id"`
+}
+
+type ListTaskHistoryResponseObject interface {
+	VisitListTaskHistoryResponse(w http.ResponseWriter) error
+}
+
+type ListTaskHistory200JSONResponse TaskHistoryResponse
+
+func (response ListTaskHistory200JSONResponse) VisitListTaskHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskHistory401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListTaskHistory401JSONResponse) VisitListTaskHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskHistory404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListTaskHistory404JSONResponse) VisitListTaskHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTaskHistory500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response ListTaskHistory500JSONResponse) VisitListTaskHistoryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -928,6 +1978,24 @@ type StrictServerInterface interface {
 	// Register Регистрация пользователя
 	// (POST /register)
 	Register(ctx context.Context, request RegisterRequestObject) (RegisterResponseObject, error)
+	// ListTasks Список задач команды
+	// (GET /tasks)
+	ListTasks(ctx context.Context, request ListTasksRequestObject) (ListTasksResponseObject, error)
+	// CreateTask Создание задачи
+	// (POST /tasks)
+	CreateTask(ctx context.Context, request CreateTaskRequestObject) (CreateTaskResponseObject, error)
+	// UpdateTask Обновление задачи
+	// (PUT /tasks/{id})
+	UpdateTask(ctx context.Context, request UpdateTaskRequestObject) (UpdateTaskResponseObject, error)
+	// ListTaskComments Комментарии задачи
+	// (GET /tasks/{id}/comments)
+	ListTaskComments(ctx context.Context, request ListTaskCommentsRequestObject) (ListTaskCommentsResponseObject, error)
+	// AddTaskComment Добавление комментария
+	// (POST /tasks/{id}/comments)
+	AddTaskComment(ctx context.Context, request AddTaskCommentRequestObject) (AddTaskCommentResponseObject, error)
+	// ListTaskHistory История изменений задачи
+	// (GET /tasks/{id}/history)
+	ListTaskHistory(ctx context.Context, request ListTaskHistoryRequestObject) (ListTaskHistoryResponseObject, error)
 	// ListTeams Список команд пользователя
 	// (GET /teams)
 	ListTeams(ctx context.Context, request ListTeamsRequestObject) (ListTeamsResponseObject, error)
@@ -1040,6 +2108,182 @@ func (sh *strictHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListTasks operation middleware
+func (sh *strictHandler) ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams) {
+	var request ListTasksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTasks(ctx, request.(ListTasksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTasks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTasksResponseObject); ok {
+		if err := validResponse.VisitListTasksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateTask operation middleware
+func (sh *strictHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	var request CreateTaskRequestObject
+
+	var body CreateTaskJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateTask(ctx, request.(CreateTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateTaskResponseObject); ok {
+		if err := validResponse.VisitCreateTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateTask operation middleware
+func (sh *strictHandler) UpdateTask(w http.ResponseWriter, r *http.Request, id TaskID) {
+	var request UpdateTaskRequestObject
+
+	request.Id = id
+
+	var body UpdateTaskJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateTask(ctx, request.(UpdateTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateTaskResponseObject); ok {
+		if err := validResponse.VisitUpdateTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTaskComments operation middleware
+func (sh *strictHandler) ListTaskComments(w http.ResponseWriter, r *http.Request, id TaskID, params ListTaskCommentsParams) {
+	var request ListTaskCommentsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTaskComments(ctx, request.(ListTaskCommentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTaskComments")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTaskCommentsResponseObject); ok {
+		if err := validResponse.VisitListTaskCommentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddTaskComment operation middleware
+func (sh *strictHandler) AddTaskComment(w http.ResponseWriter, r *http.Request, id TaskID) {
+	var request AddTaskCommentRequestObject
+
+	request.Id = id
+
+	var body AddTaskCommentJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddTaskComment(ctx, request.(AddTaskCommentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddTaskComment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddTaskCommentResponseObject); ok {
+		if err := validResponse.VisitAddTaskCommentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTaskHistory operation middleware
+func (sh *strictHandler) ListTaskHistory(w http.ResponseWriter, r *http.Request, id TaskID) {
+	var request ListTaskHistoryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTaskHistory(ctx, request.(ListTaskHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTaskHistory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTaskHistoryResponseObject); ok {
+		if err := validResponse.VisitListTaskHistoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListTeams operation middleware
 func (sh *strictHandler) ListTeams(w http.ResponseWriter, r *http.Request) {
 	var request ListTeamsRequestObject
@@ -1133,43 +2377,66 @@ func (sh *strictHandler) InviteMember(w http.ResponseWriter, r *http.Request, id
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"641/DQA=",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

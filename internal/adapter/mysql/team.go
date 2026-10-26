@@ -22,15 +22,8 @@ func NewTeamRepository(db *sqlx.DB) *TeamRepository {
 	return &TeamRepository{db: db}
 }
 
-// CreateWithOwner атомарно создаёт команду и добавляет создателя как owner.
-func (r *TeamRepository) CreateWithOwner(ctx context.Context, team *domain.Team) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	res, err := tx.ExecContext(ctx,
+func (r *TeamRepository) Create(ctx context.Context, team *domain.Team) error {
+	res, err := ext(ctx, r.db).ExecContext(ctx,
 		`INSERT INTO teams (name, created_by, created_at) VALUES (?, ?, ?)`,
 		team.Name, team.CreatedBy, team.CreatedAt,
 	)
@@ -38,30 +31,17 @@ func (r *TeamRepository) CreateWithOwner(ctx context.Context, team *domain.Team)
 		return fmt.Errorf("insert team: %w", err)
 	}
 
-	teamID, err := res.LastInsertId()
+	id, err := res.LastInsertId()
 	if err != nil {
 		return fmt.Errorf("team last insert id: %w", err)
 	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO team_members (team_id, user_id, role, created_at) VALUES (?, ?, ?, ?)`,
-		teamID, team.CreatedBy, string(domain.RoleOwner), team.CreatedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("insert team owner: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit team tx: %w", err)
-	}
-
-	team.ID = teamID
+	team.ID = id
 	return nil
 }
 
 func (r *TeamRepository) ListByUser(ctx context.Context, userID int64) ([]domain.TeamWithRole, error) {
 	teams := make([]domain.TeamWithRole, 0)
-	err := r.db.SelectContext(ctx, &teams, `
+	err := sqlx.SelectContext(ctx, ext(ctx, r.db), &teams, `
 		SELECT t.id, t.name, t.created_by, t.created_at, tm.role
 		FROM teams t
 		JOIN team_members tm ON tm.team_id = t.id
@@ -77,7 +57,7 @@ func (r *TeamRepository) ListByUser(ctx context.Context, userID int64) ([]domain
 
 func (r *TeamRepository) Membership(ctx context.Context, teamID, userID int64) (domain.Role, error) {
 	var role domain.Role
-	err := r.db.GetContext(ctx, &role,
+	err := sqlx.GetContext(ctx, ext(ctx, r.db), &role,
 		`SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -90,7 +70,7 @@ func (r *TeamRepository) Membership(ctx context.Context, teamID, userID int64) (
 }
 
 func (r *TeamRepository) AddMember(ctx context.Context, teamID, userID int64, role domain.Role) error {
-	_, err := r.db.ExecContext(ctx,
+	_, err := ext(ctx, r.db).ExecContext(ctx,
 		`INSERT INTO team_members (team_id, user_id, role, created_at) VALUES (?, ?, ?, UTC_TIMESTAMP(6))`,
 		teamID, userID, string(role),
 	)

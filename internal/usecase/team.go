@@ -30,10 +30,11 @@ type TeamMember struct {
 type TeamUseCase struct {
 	teams TeamRepository
 	users UserRepository
+	tx    TransactionManager
 }
 
-func NewTeamUseCase(teams TeamRepository, users UserRepository) *TeamUseCase {
-	return &TeamUseCase{teams: teams, users: users}
+func NewTeamUseCase(teams TeamRepository, users UserRepository, tx TransactionManager) *TeamUseCase {
+	return &TeamUseCase{teams: teams, users: users, tx: tx}
 }
 
 func (uc *TeamUseCase) Create(ctx context.Context, cmd CreateTeamCommand) (*domain.Team, error) {
@@ -50,7 +51,15 @@ func (uc *TeamUseCase) Create(ctx context.Context, cmd CreateTeamCommand) (*doma
 		CreatedBy: cmd.OwnerID,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := uc.teams.CreateWithOwner(ctx, team); err != nil {
+
+	// Создание команды и добавление создателя как owner — атомарно.
+	err := uc.tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := uc.teams.Create(txCtx, team); err != nil {
+			return err
+		}
+		return uc.teams.AddMember(txCtx, team.ID, cmd.OwnerID, domain.RoleOwner)
+	})
+	if err != nil {
 		return nil, err
 	}
 	return team, nil

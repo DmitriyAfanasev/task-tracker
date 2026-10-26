@@ -21,17 +21,28 @@ type TeamUseCase interface {
 	Invite(ctx context.Context, cmd usecase.InviteMemberCommand) (*usecase.TeamMember, error)
 }
 
+// TaskUseCase — порт HTTP-слоя для сценариев задач.
+type TaskUseCase interface {
+	Create(ctx context.Context, cmd usecase.CreateTaskCommand) (*domain.Task, error)
+	List(ctx context.Context, query usecase.ListTasksQuery) (*usecase.TaskListResult, error)
+	Update(ctx context.Context, cmd usecase.UpdateTaskCommand) (*domain.Task, error)
+	History(ctx context.Context, userID, taskID int64) ([]domain.TaskHistoryEntry, error)
+	AddComment(ctx context.Context, cmd usecase.AddCommentCommand) (*domain.TaskComment, error)
+	Comments(ctx context.Context, query usecase.ListCommentsQuery) (*usecase.CommentListResult, error)
+}
+
 // Handler — тонкий адаптер между сгенерированным OpenAPI-контрактом и use case.
 // Здесь нет бизнес-правил: только вызов сценария и маппинг результата.
 type Handler struct {
 	auth  AuthUseCase
 	teams TeamUseCase
+	tasks TaskUseCase
 }
 
 var _ openapi.StrictServerInterface = (*Handler)(nil)
 
-func NewHandler(auth AuthUseCase, teams TeamUseCase) *Handler {
-	return &Handler{auth: auth, teams: teams}
+func NewHandler(auth AuthUseCase, teams TeamUseCase, tasks TaskUseCase) *Handler {
+	return &Handler{auth: auth, teams: teams, tasks: tasks}
 }
 
 func (h *Handler) Register(ctx context.Context, request openapi.RegisterRequestObject) (openapi.RegisterResponseObject, error) {
@@ -134,4 +145,153 @@ func (h *Handler) InviteMember(ctx context.Context, request openapi.InviteMember
 	}
 
 	return openapi.InviteMember201JSONResponse(toAPITeamMember(*member)), nil
+}
+
+func (h *Handler) CreateTask(ctx context.Context, request openapi.CreateTaskRequestObject) (openapi.CreateTaskResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, domain.ErrBadRequest
+	}
+
+	task, err := h.tasks.Create(ctx, usecase.CreateTaskCommand{
+		UserID:      userID,
+		TeamID:      request.Body.TeamId,
+		Title:       request.Body.Title,
+		Description: request.Body.Description,
+		Status:      toDomainStatusPtr(request.Body.Status),
+		AssigneeID:  request.Body.AssigneeId,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return openapi.CreateTask201JSONResponse(toAPITask(*task)), nil
+}
+
+func (h *Handler) ListTasks(ctx context.Context, request openapi.ListTasksRequestObject) (openapi.ListTasksResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := h.tasks.List(ctx, usecase.ListTasksQuery{
+		UserID:     userID,
+		TeamID:     request.Params.TeamId,
+		Status:     toDomainStatusPtr(request.Params.Status),
+		AssigneeID: request.Params.AssigneeId,
+		Limit:      intValue(request.Params.Limit),
+		Offset:     intValue(request.Params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]openapi.Task, 0, len(result.Tasks))
+	for _, task := range result.Tasks {
+		items = append(items, toAPITask(task))
+	}
+
+	return openapi.ListTasks200JSONResponse{
+		Items:  items,
+		Total:  result.Total,
+		Limit:  result.Limit,
+		Offset: result.Offset,
+	}, nil
+}
+
+func (h *Handler) UpdateTask(ctx context.Context, request openapi.UpdateTaskRequestObject) (openapi.UpdateTaskResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, domain.ErrBadRequest
+	}
+
+	task, err := h.tasks.Update(ctx, usecase.UpdateTaskCommand{
+		UserID:          userID,
+		TaskID:          int64(request.Id),
+		Title:           request.Body.Title,
+		Description:     request.Body.Description,
+		Status:          toDomainStatusPtr(request.Body.Status),
+		AssigneeID:      request.Body.AssigneeId,
+		ExpectedVersion: &request.Body.Version,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return openapi.UpdateTask200JSONResponse(toAPITask(*task)), nil
+}
+
+func (h *Handler) ListTaskHistory(ctx context.Context, request openapi.ListTaskHistoryRequestObject) (openapi.ListTaskHistoryResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := h.tasks.History(ctx, userID, int64(request.Id))
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]openapi.TaskHistoryEntry, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, toAPITaskHistoryEntry(entry))
+	}
+
+	return openapi.ListTaskHistory200JSONResponse{Items: items}, nil
+}
+
+func (h *Handler) AddTaskComment(ctx context.Context, request openapi.AddTaskCommentRequestObject) (openapi.AddTaskCommentResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body == nil {
+		return nil, domain.ErrBadRequest
+	}
+
+	comment, err := h.tasks.AddComment(ctx, usecase.AddCommentCommand{
+		UserID:  userID,
+		TaskID:  int64(request.Id),
+		Content: request.Body.Content,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return openapi.AddTaskComment201JSONResponse(toAPITaskComment(*comment)), nil
+}
+
+func (h *Handler) ListTaskComments(ctx context.Context, request openapi.ListTaskCommentsRequestObject) (openapi.ListTaskCommentsResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := h.tasks.Comments(ctx, usecase.ListCommentsQuery{
+		UserID: userID,
+		TaskID: int64(request.Id),
+		Limit:  intValue(request.Params.Limit),
+		Offset: intValue(request.Params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]openapi.TaskComment, 0, len(result.Comments))
+	for _, comment := range result.Comments {
+		items = append(items, toAPITaskComment(comment))
+	}
+
+	return openapi.ListTaskComments200JSONResponse{
+		Items:  items,
+		Total:  result.Total,
+		Limit:  result.Limit,
+		Offset: result.Offset,
+	}, nil
 }

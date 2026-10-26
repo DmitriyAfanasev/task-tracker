@@ -16,10 +16,47 @@ type UserRepository interface {
 
 // TeamRepository — порт хранения команд и участников.
 type TeamRepository interface {
-	CreateWithOwner(ctx context.Context, team *domain.Team) error
+	Create(ctx context.Context, team *domain.Team) error
 	ListByUser(ctx context.Context, userID int64) ([]domain.TeamWithRole, error)
 	Membership(ctx context.Context, teamID, userID int64) (domain.Role, error)
 	AddMember(ctx context.Context, teamID, userID int64, role domain.Role) error
+}
+
+// TaskRepository — порт хранения задач.
+type TaskRepository interface {
+	Create(ctx context.Context, task *domain.Task) error
+	GetByID(ctx context.Context, id int64) (*domain.Task, error)
+	GetForUpdate(ctx context.Context, id int64) (*domain.Task, error)
+	Update(ctx context.Context, task *domain.Task, expectedVersion int64) error
+	List(ctx context.Context, filter TaskFilter) ([]domain.Task, int, error)
+}
+
+// TaskHistoryRepository — порт истории изменений задач.
+type TaskHistoryRepository interface {
+	Add(ctx context.Context, entry *domain.TaskHistoryEntry) error
+	List(ctx context.Context, taskID int64) ([]domain.TaskHistoryEntry, error)
+}
+
+// TaskCommentRepository — порт комментариев задач.
+type TaskCommentRepository interface {
+	Add(ctx context.Context, comment *domain.TaskComment) error
+	List(ctx context.Context, taskID int64, limit, offset int) ([]domain.TaskComment, int, error)
+}
+
+// TaskListCache — кеш списка задач. Реализация не должна ронять запрос:
+// при недоступном Redis это просто промах кеша.
+type TaskListCache interface {
+	// Get возвращает результат, версию команды и признак попадания.
+	// Версия нужна, чтобы записать результат под тем же снимком,
+	// даже если параллельно произошла инвалидация.
+	Get(ctx context.Context, teamID int64, filterKey string) (TaskListResult, int64, bool)
+	Set(ctx context.Context, teamID int64, filterKey string, version int64, result TaskListResult)
+	InvalidateTeam(ctx context.Context, teamID int64)
+}
+
+// TransactionManager — граница транзакции на уровне сценария.
+type TransactionManager interface {
+	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // TokenIssuer — выпуск access-токенов.

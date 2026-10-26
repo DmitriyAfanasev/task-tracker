@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"secunda/internal/adapter/mysql"
+	redisadapter "secunda/internal/adapter/redis"
 	httpapi "secunda/internal/delivery/http"
 	"secunda/internal/migrations"
 	"secunda/internal/platform/auth"
@@ -56,11 +57,29 @@ func run() error {
 
 	users := mysql.NewUserRepository(db)
 	teams := mysql.NewTeamRepository(db)
+	tasks := mysql.NewTaskRepository(db)
+	history := mysql.NewTaskHistoryRepository(db)
+	comments := mysql.NewTaskCommentRepository(db)
+	txManager := mysql.NewTransactionManager(db)
+
+	redisClient := redisadapter.NewClient(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	defer func() { _ = redisClient.Close() }()
+
+	pingCtx, cancelPing := context.WithTimeout(ctx, 2*time.Second)
+	if err := redisClient.Ping(pingCtx).Err(); err != nil {
+		logger.Warn("redis is unavailable, task list cache disabled", "error", err)
+	} else {
+		logger.Info("connected to redis")
+	}
+	cancelPing()
+
+	taskCache := redisadapter.NewTaskListCache(redisClient, cfg.CacheTTL, logger)
 
 	authUseCase := usecase.NewAuthUseCase(users, tokens, hasher)
-	teamUseCase := usecase.NewTeamUseCase(teams, users)
+	teamUseCase := usecase.NewTeamUseCase(teams, users, txManager)
+	taskUseCase := usecase.NewTaskUseCase(tasks, history, comments, teams, taskCache, txManager)
 
-	handler := httpapi.NewHandler(authUseCase, teamUseCase)
+	handler := httpapi.NewHandler(authUseCase, teamUseCase, taskUseCase)
 	router, err := httpapi.NewRouter(handler, tokens, db, logger)
 	if err != nil {
 		return err

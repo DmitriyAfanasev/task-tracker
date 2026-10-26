@@ -162,6 +162,184 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /tasks:
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Создание задачи
+      description: |
+        Любой участник команды может создать задачу. Создателем считается
+        текущий пользователь. Исполнитель должен быть участником этой же команды.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Задача создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: Список задач команды
+      description: |
+        Требует `team_id` и участия в команде. Результат кешируется в Redis
+        на 5 минут с учётом команды и фильтров.
+      parameters:
+        - $ref: '#/components/parameters/TeamIDQuery'
+        - $ref: '#/components/parameters/TaskStatusQuery'
+        - $ref: '#/components/parameters/AssigneeIDQuery'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Список задач
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TasksResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}:
+    put:
+      tags: [tasks]
+      operationId: updateTask
+      summary: Обновление задачи
+      description: |
+        Проверяет права на уровне полей и пишет историю изменений в той же
+        транзакции. Поле `version` обязательно: конкурентные обновления
+        сериализуются блокировкой строки, устаревшая версия даёт 409.
+        `assignee_id: 0` снимает исполнителя.
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Задача обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}/history:
+    get:
+      tags: [tasks]
+      operationId: listTaskHistory
+      summary: История изменений задачи
+      description: Доступна только участникам команды задачи.
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: История изменений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}/comments:
+    post:
+      tags: [comments]
+      operationId: addTaskComment
+      summary: Добавление комментария
+      description: Комментировать может любой участник команды задачи.
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskCommentRequest'
+      responses:
+        '201':
+          description: Комментарий добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [comments]
+      operationId: listTaskComments
+      summary: Комментарии задачи
+      description: Доступны только участникам команды задачи.
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/OffsetQuery'
+      responses:
+        '200':
+          description: Список комментариев
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCommentsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -179,6 +357,59 @@ components:
         type: integer
         format: int64
         minimum: 1
+    TaskID:
+      name: id
+      in: path
+      required: true
+      description: Идентификатор задачи
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    TeamIDQuery:
+      name: team_id
+      in: query
+      required: true
+      description: Идентификатор команды
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    TaskStatusQuery:
+      name: status
+      in: query
+      required: false
+      description: Фильтр по статусу
+      schema:
+        $ref: '#/components/schemas/TaskStatus'
+    AssigneeIDQuery:
+      name: assignee_id
+      in: query
+      required: false
+      description: Фильтр по исполнителю
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    LimitQuery:
+      name: limit
+      in: query
+      required: false
+      description: Размер страницы
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OffsetQuery:
+      name: offset
+      in: query
+      required: false
+      description: Смещение
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
 
   responses:
     BadRequest:
@@ -383,6 +614,229 @@ components:
           example: 2
         role:
           $ref: '#/components/schemas/Role'
+
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done, cancelled]
+
+    CreateTaskRequest:
+      type: object
+      required: [team_id, title]
+      properties:
+        team_id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        title:
+          type: string
+          maxLength: 255
+          example: Подготовить релиз
+        description:
+          type: string
+          maxLength: 5000
+          default: ""
+          example: Собрать changelog и проверить миграции
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        assignee_id:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 1
+          example: 2
+
+    UpdateTaskRequest:
+      type: object
+      required: [version]
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 5000
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        assignee_id:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Новый исполнитель; 0 снимает исполнителя
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Ожидаемая версия задачи для optimistic locking
+
+    Task:
+      type: object
+      required:
+        - id
+        - team_id
+        - title
+        - description
+        - status
+        - created_by
+        - assignee_id
+        - created_at
+        - updated_at
+        - closed_at
+        - version
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 10
+        team_id:
+          type: integer
+          format: int64
+          example: 1
+        title:
+          type: string
+          example: Подготовить релиз
+        description:
+          type: string
+          example: Собрать changelog
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        created_by:
+          type: integer
+          format: int64
+          example: 1
+        assignee_id:
+          type: integer
+          format: int64
+          nullable: true
+          example: 2
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+          format: int64
+          example: 3
+
+    TasksResponse:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        total:
+          type: integer
+          example: 42
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+
+    TaskChange:
+      type: object
+      required: [field, old, new]
+      properties:
+        field:
+          type: string
+          example: status
+        old:
+          description: Предыдущее значение (строка, число или null)
+        new:
+          description: Новое значение (строка, число или null)
+
+    TaskHistoryEntry:
+      type: object
+      required: [id, task_id, changed_by, changes, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 100
+        task_id:
+          type: integer
+          format: int64
+          example: 10
+        changed_by:
+          type: integer
+          format: int64
+          example: 1
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskChange'
+        created_at:
+          type: string
+          format: date-time
+
+    TaskHistoryResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskHistoryEntry'
+
+    CreateTaskCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          example: Проверил миграции, всё ок
+
+    TaskComment:
+      type: object
+      required: [id, task_id, user_id, content, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 5
+        task_id:
+          type: integer
+          format: int64
+          example: 10
+        user_id:
+          type: integer
+          format: int64
+          example: 2
+        content:
+          type: string
+          example: Проверил миграции, всё ок
+        created_at:
+          type: string
+          format: date-time
+
+    TaskCommentsResponse:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskComment'
+        total:
+          type: integer
+          example: 3
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
 
     ErrorResponse:
       type: object

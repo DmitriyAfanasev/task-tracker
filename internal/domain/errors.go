@@ -34,6 +34,16 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
+// Is позволяет сравнивать копии ошибок (WithErr/WithDetails) с сентинелами
+// через errors.Is: копия сохраняет Kind и Code исходной ошибки.
+func (e *Error) Is(target error) bool {
+	other, ok := target.(*Error)
+	if !ok {
+		return false
+	}
+	return e.Kind == other.Kind && e.Code == other.Code
+}
+
 // WithDetails возвращает копию ошибки с деталями валидации.
 func (e *Error) WithDetails(details map[string]string) *Error {
 	cp := *e
@@ -66,5 +76,7 @@ var (
 	ErrEmailTaken      = newError(KindConflict, "email_taken", "пользователь с таким email уже существует")
 	ErrAlreadyMember   = newError(KindConflict, "already_member", "пользователь уже состоит в команде")
 	ErrInvalidRole     = newError(KindBadRequest, "invalid_role", "роль должна быть admin или member")
+	ErrTaskNotFound    = newError(KindNotFound, "task_not_found", "задача не найдена")
+	ErrVersionConflict = newError(KindConflict, "version_conflict", "задача была изменена другим пользователем")
 	ErrInternal        = newError(KindInternal, "internal_error", "внутренняя ошибка сервера")
 )
