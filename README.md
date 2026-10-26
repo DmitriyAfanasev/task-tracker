@@ -2,8 +2,8 @@
 
 REST API для управления задачами внутри команд: роли, история изменений,
 комментарии, кеширование списка задач и SQL-аналитика.
-Реализованы **этапы 1–2** — аутентификация, команды, задачи, история,
-комментарии и Redis-кеш. SQL-отчёт — этап 3 (см. ниже).
+Реализованы аутентификация, команды, задачи, история, комментарии, Redis-кеш
+и SQL-отчёт по команде.
 
 ## Стек
 
@@ -66,6 +66,13 @@ make test          # тесты
 make openapigen    # перегенерировать код из api/openapi.yaml
 ```
 
+Интеграционный тест SQL-отчёта использует реальный MySQL и намеренно не
+запускается без отдельной БД. После `make up` его можно выполнить так:
+
+```bash
+TEST_MYSQL_DSN='secunda:secunda@tcp(127.0.0.1:3306)/secunda?parseTime=true&loc=UTC&charset=utf8mb4' go test ./internal/adapter/mysql -run TestTeamStatsRepositoryIntegration
+```
+
 Если стандартные порты заняты, задайте в `.env`:
 `MYSQL_HOST_PORT`, `REDIS_HOST_PORT`, `APP_HOST_PORT`.
 
@@ -117,7 +124,7 @@ Swagger UI отдаёт ту же встроенную спеку по `/swagger
 по `/swagger/` только вне `production`; в production маршруты `/swagger/*`
 не регистрируются.
 
-## Реализованные эндпоинты (этапы 1–2)
+## Реализованные эндпоинты
 
 | Метод | Путь | Доступ | Описание |
 |---|---|---|---|
@@ -126,6 +133,7 @@ Swagger UI отдаёт ту же встроенную спеку по `/swagger
 | `POST` | `/api/v1/teams` | JWT | Создание команды, автор становится owner |
 | `GET` | `/api/v1/teams` | JWT | Только свои команды |
 | `POST` | `/api/v1/teams/{id}/invite` | owner/admin | Приглашение по `user_id` и роли |
+| `GET` | `/api/v1/teams/{team_id}/stats` | owner/admin | SQL-отчёт по одной команде |
 | `POST` | `/api/v1/tasks` | участник команды | Создание задачи |
 | `GET` | `/api/v1/tasks` | участник команды | Список с фильтрами и пагинацией |
 | `PUT` | `/api/v1/tasks/{id}` | по правилам задачи | Обновление с optimistic locking |

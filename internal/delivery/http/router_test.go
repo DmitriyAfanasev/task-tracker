@@ -92,7 +92,7 @@ func TestPublicOperationsAreDerivedFromSpec(t *testing.T) {
 		}
 	}
 
-	wantProtected := []string{"GET /teams", "POST /teams", "POST /teams/{id}/invite"}
+	wantProtected := []string{"GET /teams", "POST /teams", "POST /teams/{id}/invite", "GET /teams/{team_id}/stats"}
 	for _, operation := range wantProtected {
 		if _, ok := public[operation]; ok {
 			t.Errorf("operation %q must be protected", operation)

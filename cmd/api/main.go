@@ -57,6 +57,7 @@ func run() error {
 
 	users := mysql.NewUserRepository(db)
 	teams := mysql.NewTeamRepository(db)
+	stats := mysql.NewTeamStatsRepository(db)
 	tasks := mysql.NewTaskRepository(db)
 	history := mysql.NewTaskHistoryRepository(db)
 	comments := mysql.NewTaskCommentRepository(db)
@@ -77,9 +78,10 @@ func run() error {
 
 	authUseCase := usecase.NewAuthUseCase(users, tokens, hasher)
 	teamUseCase := usecase.NewTeamUseCase(teams, users, txManager)
+	statsUseCase := usecase.NewTeamStatsUseCase(teams, stats)
 	taskUseCase := usecase.NewTaskUseCase(tasks, history, comments, teams, taskCache, txManager)
 
-	handler := httpapi.NewHandler(authUseCase, teamUseCase, taskUseCase)
+	handler := httpapi.NewHandler(authUseCase, teamUseCase, statsUseCase, taskUseCase)
 	router, err := httpapi.NewRouter(handler, tokens, db, logger, httpapi.RouterOptions{
 		EnableSwagger: !cfg.IsProduction(),
 	})

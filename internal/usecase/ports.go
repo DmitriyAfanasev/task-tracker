@@ -22,6 +22,12 @@ type TeamRepository interface {
 	AddMember(ctx context.Context, teamID, userID int64, role domain.Role) error
 }
 
+// TeamStatsRepository выполняет агрегированный SQL-отчёт по команде.
+// Авторизация остаётся в use case, чтобы SQL-адаптер не знал о правилах доступа.
+type TeamStatsRepository interface {
+	Stats(ctx context.Context, teamID int64) (*domain.TeamStats, error)
+}
+
 // TaskRepository — порт хранения задач.
 type TaskRepository interface {
 	Create(ctx context.Context, task *domain.Task) error

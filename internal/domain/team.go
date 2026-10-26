@@ -52,3 +52,26 @@ type TeamWithRole struct {
 	CreatedAt time.Time `db:"created_at" json:"created_at" example:"2026-01-01T12:00:00Z"`
 	Role      Role      `db:"role" json:"role" example:"owner"`
 }
+
+// TeamStats содержит агрегированный SQL-отчёт по одной команде.
+// AverageCloseSeconds равен nil, когда в команде нет завершённых задач.
+type TeamStats struct {
+	TeamID              int64
+	TasksByStatus       TasksByStatus
+	TopAssignees        []TopAssignee
+	AverageCloseSeconds *float64
+	CommentsCount       int64
+}
+
+type TasksByStatus struct {
+	Todo       int64
+	InProgress int64
+	Done       int64
+	Cancelled  int64
+}
+
+type TopAssignee struct {
+	UserID      int64
+	Name        string
+	ClosedTasks int64
+}

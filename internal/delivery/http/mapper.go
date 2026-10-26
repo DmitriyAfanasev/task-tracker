@@ -44,6 +44,25 @@ func toAPITeamMember(member usecase.TeamMember) openapi.TeamMember {
 	}
 }
 
+func toAPITeamStats(stats domain.TeamStats) openapi.TeamStatsResponse {
+	topAssignees := make([]openapi.TopAssignee, 0, len(stats.TopAssignees))
+	for _, assignee := range stats.TopAssignees {
+		topAssignees = append(topAssignees, openapi.TopAssignee{
+			UserId: assignee.UserID, Name: assignee.Name, ClosedTasks: assignee.ClosedTasks,
+		})
+	}
+	return openapi.TeamStatsResponse{
+		TeamId: stats.TeamID,
+		TasksByStatus: openapi.TasksByStatus{
+			Todo: stats.TasksByStatus.Todo, InProgress: stats.TasksByStatus.InProgress,
+			Done: stats.TasksByStatus.Done, Cancelled: stats.TasksByStatus.Cancelled,
+		},
+		TopAssignees:        topAssignees,
+		AverageCloseSeconds: stats.AverageCloseSeconds,
+		CommentsCount:       stats.CommentsCount,
+	}
+}
+
 func toAPITask(task domain.Task) openapi.Task {
 	return openapi.Task{
 		Id:          task.ID,

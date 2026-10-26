@@ -17,6 +17,10 @@ tags:
     description: Регистрация и аутентификация
   - name: teams
     description: Команды и участники
+  - name: tasks
+    description: Задачи, история и комментарии
+  - name: stats
+    description: SQL-аналитика по команде
 security:
   - bearerAuth: []
 
@@ -159,6 +163,40 @@ paths:
           $ref: '#/components/responses/Conflict'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /teams/{team_id}/stats:
+    get:
+      tags: [stats]
+      operationId: getTeamStats
+      summary: Статистика команды
+      description: |
+        SQL-отчёт по одной команде. Доступен только создателю (owner) или
+        администратору (admin) команды; остальные участники получают 403,
+        не участники — 404.
+
+        `top_assignees` — до трёх исполнителей по количеству задач в статусе
+        `done`, закрытых за последние 30 дней. `average_close_seconds` —
+        среднее время от создания до закрытия по всем завершённым задачам,
+        в секундах; `null`, если завершённых задач нет.
+      parameters:
+        - $ref: '#/components/parameters/TeamIDPath'
+      responses:
+        '200':
+          description: Статистика команды
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamStatsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -350,6 +388,15 @@ components:
   parameters:
     TeamID:
       name: id
+      in: path
+      required: true
+      description: Идентификатор команды
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    TeamIDPath:
+      name: team_id
       in: path
       required: true
       description: Идентификатор команды
@@ -614,6 +661,69 @@ components:
           example: 2
         role:
           $ref: '#/components/schemas/Role'
+
+    TeamStatsResponse:
+      type: object
+      required: [team_id, tasks_by_status, top_assignees, average_close_seconds, comments_count]
+      properties:
+        team_id:
+          type: integer
+          format: int64
+          example: 1
+        tasks_by_status:
+          $ref: '#/components/schemas/TasksByStatus'
+        top_assignees:
+          type: array
+          description: До трёх исполнителей по закрытым за 30 дней задачам
+          items:
+            $ref: '#/components/schemas/TopAssignee'
+        average_close_seconds:
+          type: number
+          format: double
+          nullable: true
+          description: Среднее время закрытия завершённых задач в секундах
+          example: 86400.0
+        comments_count:
+          type: integer
+          format: int64
+          example: 12
+
+    TasksByStatus:
+      type: object
+      required: [todo, in_progress, done, cancelled]
+      properties:
+        todo:
+          type: integer
+          format: int64
+          example: 3
+        in_progress:
+          type: integer
+          format: int64
+          example: 2
+        done:
+          type: integer
+          format: int64
+          example: 10
+        cancelled:
+          type: integer
+          format: int64
+          example: 1
+
+    TopAssignee:
+      type: object
+      required: [user_id, name, closed_tasks]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+          example: 2
+        name:
+          type: string
+          example: Пётр
+        closed_tasks:
+          type: integer
+          format: int64
+          example: 5
 
     TaskStatus:
       type: string

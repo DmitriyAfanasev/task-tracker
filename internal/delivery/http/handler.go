@@ -21,6 +21,11 @@ type TeamUseCase interface {
 	Invite(ctx context.Context, cmd usecase.InviteMemberCommand) (*usecase.TeamMember, error)
 }
 
+// TeamStatsUseCase — сценарий SQL-аналитики команды.
+type TeamStatsUseCase interface {
+	Get(ctx context.Context, userID, teamID int64) (*domain.TeamStats, error)
+}
+
 // TaskUseCase — порт HTTP-слоя для сценариев задач.
 type TaskUseCase interface {
 	Create(ctx context.Context, cmd usecase.CreateTaskCommand) (*domain.Task, error)
@@ -36,13 +41,14 @@ type TaskUseCase interface {
 type Handler struct {
 	auth  AuthUseCase
 	teams TeamUseCase
+	stats TeamStatsUseCase
 	tasks TaskUseCase
 }
 
 var _ openapi.StrictServerInterface = (*Handler)(nil)
 
-func NewHandler(auth AuthUseCase, teams TeamUseCase, tasks TaskUseCase) *Handler {
-	return &Handler{auth: auth, teams: teams, tasks: tasks}
+func NewHandler(auth AuthUseCase, teams TeamUseCase, stats TeamStatsUseCase, tasks TaskUseCase) *Handler {
+	return &Handler{auth: auth, teams: teams, stats: stats, tasks: tasks}
 }
 
 func (h *Handler) Register(ctx context.Context, request openapi.RegisterRequestObject) (openapi.RegisterResponseObject, error) {
@@ -145,6 +151,19 @@ func (h *Handler) InviteMember(ctx context.Context, request openapi.InviteMember
 	}
 
 	return openapi.InviteMember201JSONResponse(toAPITeamMember(*member)), nil
+}
+
+func (h *Handler) GetTeamStats(ctx context.Context, request openapi.GetTeamStatsRequestObject) (openapi.GetTeamStatsResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stats, err := h.stats.Get(ctx, userID, int64(request.TeamId))
+	if err != nil {
+		return nil, err
+	}
+	return openapi.GetTeamStats200JSONResponse(toAPITeamStats(*stats)), nil
 }
 
 func (h *Handler) CreateTask(ctx context.Context, request openapi.CreateTaskRequestObject) (openapi.CreateTaskResponseObject, error) {
