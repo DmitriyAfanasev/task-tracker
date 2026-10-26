@@ -80,7 +80,9 @@ func run() error {
 	taskUseCase := usecase.NewTaskUseCase(tasks, history, comments, teams, taskCache, txManager)
 
 	handler := httpapi.NewHandler(authUseCase, teamUseCase, taskUseCase)
-	router, err := httpapi.NewRouter(handler, tokens, db, logger)
+	router, err := httpapi.NewRouter(handler, tokens, db, logger, httpapi.RouterOptions{
+		EnableSwagger: !cfg.IsProduction(),
+	})
 	if err != nil {
 		return err
 	}

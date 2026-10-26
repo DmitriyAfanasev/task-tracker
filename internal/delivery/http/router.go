@@ -19,9 +19,16 @@ import (
 
 const maxRequestBodyBytes = 1 << 20 // 1 MiB
 
+// RouterOptions задаёт необязательные возможности HTTP-слоя.
+type RouterOptions struct {
+	// EnableSwagger включает Swagger UI и /swagger/doc.json.
+	// В production выключается, чтобы не раскрывать контракт и UI.
+	EnableSwagger bool
+}
+
 // NewRouter собирает HTTP-слой: инфраструктурные middleware, health,
 // Swagger UI и сгенерированный по OpenAPI роутер с JWT-аутентификацией.
-func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logger) (http.Handler, error) {
+func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logger, opts RouterOptions) (http.Handler, error) {
 	spec, err := openapi.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -42,11 +49,13 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logg
 	})
 	router.Get("/readyz", readiness(db))
 
-	router.Get("/swagger/doc.json", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = w.Write(specJSON)
-	})
-	router.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json")))
+	if opts.EnableSwagger {
+		router.Get("/swagger/doc.json", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			_, _ = w.Write(specJSON)
+		})
+		registerSwaggerUI(router)
+	}
 
 	strictHandler := openapi.NewStrictHandlerWithOptions(handler, nil, openapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -70,6 +79,28 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, log *slog.Logg
 	router.Mount("/api/v1", apiRouter)
 
 	return router, nil
+}
+
+// registerSwaggerUI отдаёт Swagger UI по каноническому /swagger/.
+// /swagger и /swagger/index.html перенаправляют на /swagger/, а
+// относительные ассеты UI продолжают работать через wildcard-маршрут.
+func registerSwaggerUI(router chi.Router) {
+	handler := httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json"))
+
+	serveIndex := func(w http.ResponseWriter, r *http.Request) {
+		indexRequest := r.Clone(r.Context())
+		indexRequest.URL.Path = "/swagger/index.html"
+		indexRequest.RequestURI = "/swagger/index.html"
+		handler(w, indexRequest)
+	}
+	redirectToIndex := func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/swagger/", http.StatusMovedPermanently)
+	}
+
+	router.Get("/swagger", redirectToIndex)
+	router.Get("/swagger/", serveIndex)
+	router.Get("/swagger/index.html", redirectToIndex)
+	router.Get("/swagger/*", handler)
 }
 
 // publicOperations вычисляет операции без security из OpenAPI-спеки.

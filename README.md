@@ -53,7 +53,7 @@ make up
 ```
 
 - API: <http://localhost:8080/api/v1>
-- Swagger UI: <http://localhost:8080/swagger/index.html>
+- Swagger UI: <http://localhost:8080/swagger/> (только вне `production`)
 - Health: <http://localhost:8080/healthz>, readiness: `/readyz`
 
 Полезные команды:
@@ -85,7 +85,7 @@ make run
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| `APP_ENV` | `local` | Окружение |
+| `APP_ENV` | `local` | Окружение; при `production` Swagger UI и `/swagger/doc.json` отключены |
 | `HTTP_ADDR` | `:8080` | Адрес HTTP-сервера |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `DB_DSN` | собирается автоматически | DSN MySQL; compose и `make run` подставляют его сами. Для прямого `go run` задайте вручную, обязательно `parseTime=true&loc=UTC` |
@@ -113,7 +113,9 @@ make openapigen
 
 Конфигурация генерации — `api/oapi-codegen.yaml`, результат —
 `internal/delivery/http/openapi/api.gen.go` (файл коммитится).
-Swagger UI отдаёт ту же встроенную спеку по `/swagger/doc.json`.
+Swagger UI отдаёт ту же встроенную спеку по `/swagger/doc.json` и доступен
+по `/swagger/` только вне `production`; в production маршруты `/swagger/*`
+не регистрируются.
 
 ## Реализованные эндпоинты (этапы 1–2)
 
