@@ -63,18 +63,22 @@ make logs          # логи приложения
 make ps            # статус контейнеров
 make down          # остановить
 make test          # тесты
+make test-integration  # интеграционные тесты (testcontainers)
 make openapigen    # перегенерировать код из api/openapi.yaml
 ```
 
-Интеграционный тест SQL-отчёта использует реальный MySQL и намеренно не
-запускается без отдельной БД. После `make up` его можно выполнить так:
+Интеграционный тест SQL-отчёта запускает MySQL через testcontainers и не
+требует предварительно поднятой БД.
 
 ```bash
-TEST_MYSQL_DSN='secunda:secunda@tcp(127.0.0.1:3306)/secunda?parseTime=true&loc=UTC&charset=utf8mb4' go test ./internal/adapter/mysql -run TestTeamStatsRepositoryIntegration
+make test-integration
 ```
 
-Если стандартные порты заняты, задайте в `.env`:
-`MYSQL_HOST_PORT`, `REDIS_HOST_PORT`, `APP_HOST_PORT`.
+Или напрямую из кода:
+
+```bash
+go test -tags=integration -count=1 -v ./internal/adapter/mysql/ -run TestTeamStatsRepositoryIntegration
+```
 
 Для локального запуска без Docker-образа приложения (MySQL и Redis — в compose):
 
