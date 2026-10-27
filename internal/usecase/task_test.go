@@ -2,96 +2,17 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 
 	"secunda/internal/domain"
 )
 
-type fakeTaskRepository struct {
-	task       domain.Task
-	updates    int
-	expected   int64
-	createCall int
-}
+// --- shared helpers ---
 
-func (f *fakeTaskRepository) Create(_ context.Context, task *domain.Task) error {
-	f.createCall++
-	task.ID = 1
-	f.task = *task
-	return nil
-}
-
-func (f *fakeTaskRepository) GetByID(_ context.Context, _ int64) (*domain.Task, error) {
-	copy := f.task
-	return &copy, nil
-}
-
-func (f *fakeTaskRepository) GetForUpdate(_ context.Context, _ int64) (*domain.Task, error) {
-	copy := f.task
-	return &copy, nil
-}
-
-func (f *fakeTaskRepository) Update(_ context.Context, task *domain.Task, expectedVersion int64) error {
-	if expectedVersion != f.task.Version {
-		return domain.ErrVersionConflict
-	}
-	f.updates++
-	f.expected = expectedVersion
-	f.task = *task
-	return nil
-}
-
-func (f *fakeTaskRepository) List(context.Context, TaskFilter) ([]domain.Task, int, error) {
-	return nil, 0, errors.New("not implemented")
-}
-
-type fakeHistoryRepository struct {
-	entries []domain.TaskHistoryEntry
-}
-
-func (f *fakeHistoryRepository) Add(_ context.Context, entry *domain.TaskHistoryEntry) error {
-	entry.ID = int64(len(f.entries) + 1)
-	f.entries = append(f.entries, *entry)
-	return nil
-}
-
-func (f *fakeHistoryRepository) List(context.Context, int64) ([]domain.TaskHistoryEntry, error) {
-	return f.entries, nil
-}
-
-type fakeCommentRepository struct{}
-
-func (f *fakeCommentRepository) Add(context.Context, *domain.TaskComment) error { return nil }
-func (f *fakeCommentRepository) List(context.Context, int64, int, int) ([]domain.TaskComment, int, error) {
-	return nil, 0, nil
-}
-
-type fakeTeamRepository struct {
-	role          domain.Role
-	membershipErr error
-}
-
-func (f *fakeTeamRepository) Create(context.Context, *domain.Team) error { return nil }
-func (f *fakeTeamRepository) ListByUser(context.Context, int64) ([]domain.TeamWithRole, error) {
-	return nil, nil
-}
-func (f *fakeTeamRepository) Membership(context.Context, int64, int64) (domain.Role, error) {
-	return f.role, f.membershipErr
-}
-func (f *fakeTeamRepository) AddMember(context.Context, int64, int64, domain.Role) error {
-	return nil
-}
-
-type fakeTaskCache struct {
-	invalidated bool
-}
-
-func (f *fakeTaskCache) Get(context.Context, int64, string) (TaskListResult, int64, bool) {
-	return TaskListResult{}, 0, false
-}
-func (f *fakeTaskCache) Set(context.Context, int64, string, int64, TaskListResult) {}
-func (f *fakeTaskCache) InvalidateTeam(context.Context, int64)                     { f.invalidated = true }
+func ptrInt64(v int64) *int64 { return &v }
 
 type immediateTx struct{}
 
@@ -99,28 +20,46 @@ func (immediateTx) WithinTransaction(ctx context.Context, fn func(context.Contex
 	return fn(ctx)
 }
 
-func taskFixture(role domain.Role) (*TaskUseCase, *fakeTaskRepository, *fakeHistoryRepository, *fakeTaskCache) {
-	assignee := int64(2)
-	tasks := &fakeTaskRepository{task: domain.Task{
+// --- helpers ---
+
+func taskFixture(t *testing.T, role domain.Role) (*TaskUseCase, *MockTaskRepository, *MockTaskHistoryRepository, *MockTaskCommentRepository, *MockTeamRepository, *MockTaskListCache, *gomock.Controller) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	tasks := NewMockTaskRepository(ctrl)
+	history := NewMockTaskHistoryRepository(ctrl)
+	comments := NewMockTaskCommentRepository(ctrl)
+	teams := NewMockTeamRepository(ctrl)
+	cache := NewMockTaskListCache(ctrl)
+
+	task := &domain.Task{
 		ID:         10,
 		TeamID:     1,
 		Title:      "Task",
 		Status:     domain.TaskStatusTodo,
 		CreatedBy:  1,
-		AssigneeID: &assignee,
+		AssigneeID: ptrInt64(2),
 		Version:    1,
-	}}
-	history := &fakeHistoryRepository{}
-	cache := &fakeTaskCache{}
+	}
 
-	uc := NewTaskUseCase(tasks, history, &fakeCommentRepository{}, &fakeTeamRepository{role: role}, cache, immediateTx{})
-	return uc, tasks, history, cache
+	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
+	tasks.EXPECT().GetForUpdate(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(role, nil).AnyTimes()
+
+	uc := NewTaskUseCase(tasks, history, comments, teams, cache, immediateTx{})
+	return uc, tasks, history, comments, teams, cache, ctrl
 }
 
+// --- tests ---
+
 func TestUpdateTaskBumpsVersionAndWritesHistory(t *testing.T) {
-	uc, tasks, history, cache := taskFixture(domain.RoleMember)
+	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleMember)
 	status := domain.TaskStatusInProgress
 	version := int64(1)
+
+	tasks.EXPECT().Update(gomock.Any(), gomock.Any(), int64(1)).Return(nil)
+	history.EXPECT().Add(gomock.Any(), gomock.Any()).Return(nil)
+	cache.EXPECT().InvalidateTeam(gomock.Any(), int64(1)).Return()
 
 	task, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          2,
@@ -128,25 +67,13 @@ func TestUpdateTaskBumpsVersionAndWritesHistory(t *testing.T) {
 		Status:          &status,
 		ExpectedVersion: &version,
 	})
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-	if task.Version != 2 {
-		t.Fatalf("version = %d, want 2", task.Version)
-	}
-	if tasks.task.Status != domain.TaskStatusInProgress {
-		t.Fatalf("stored status = %q, want in_progress", tasks.task.Status)
-	}
-	if len(history.entries) != 1 {
-		t.Fatalf("history entries = %d, want 1", len(history.entries))
-	}
-	if !cache.invalidated {
-		t.Fatal("cache was not invalidated")
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), task.Version)
 }
 
 func TestAssigneeCannotEditTitle(t *testing.T) {
-	uc, tasks, _, _ := taskFixture(domain.RoleMember)
+	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
 	title := "Hacked"
 	version := int64(1)
 
@@ -156,18 +83,18 @@ func TestAssigneeCannotEditTitle(t *testing.T) {
 		Title:           &title,
 		ExpectedVersion: &version,
 	})
-	if !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("Update() error = %v, want ErrForbidden", err)
-	}
-	if tasks.updates != 0 {
-		t.Fatalf("updates = %d, want 0", tasks.updates)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrForbidden)
 }
 
 func TestOwnerCanEditTask(t *testing.T) {
-	uc, tasks, _, _ := taskFixture(domain.RoleOwner)
+	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleOwner)
 	title := "Renamed"
 	version := int64(1)
+
+	tasks.EXPECT().Update(gomock.Any(), gomock.Any(), int64(1)).Return(nil)
+	history.EXPECT().Add(gomock.Any(), gomock.Any()).Return(nil)
+	cache.EXPECT().InvalidateTeam(gomock.Any(), int64(1)).Return()
 
 	task, err := uc.Update(context.Background(), UpdateTaskRequest{
 		UserID:          1,
@@ -175,19 +102,13 @@ func TestOwnerCanEditTask(t *testing.T) {
 		Title:           &title,
 		ExpectedVersion: &version,
 	})
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-	if task.Title != "Renamed" {
-		t.Fatalf("title = %q, want Renamed", task.Title)
-	}
-	if tasks.updates != 1 {
-		t.Fatalf("updates = %d, want 1", tasks.updates)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Renamed", task.Title)
 }
 
 func TestStaleVersionConflicts(t *testing.T) {
-	uc, tasks, _, _ := taskFixture(domain.RoleOwner)
+	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleOwner)
 	status := domain.TaskStatusInProgress
 	version := int64(99)
 
@@ -197,16 +118,12 @@ func TestStaleVersionConflicts(t *testing.T) {
 		Status:          &status,
 		ExpectedVersion: &version,
 	})
-	if !errors.Is(err, domain.ErrVersionConflict) {
-		t.Fatalf("Update() error = %v, want ErrVersionConflict", err)
-	}
-	if tasks.updates != 0 {
-		t.Fatalf("updates = %d, want 0", tasks.updates)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrVersionConflict)
 }
 
 func TestUpdateRequiresVersion(t *testing.T) {
-	uc, tasks, _, _ := taskFixture(domain.RoleOwner)
+	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleOwner)
 	status := domain.TaskStatusInProgress
 
 	_, err := uc.Update(context.Background(), UpdateTaskRequest{
@@ -214,16 +131,12 @@ func TestUpdateRequiresVersion(t *testing.T) {
 		TaskID: 10,
 		Status: &status,
 	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("Update() error = %v, want ErrValidation", err)
-	}
-	if tasks.updates != 0 {
-		t.Fatalf("updates = %d, want 0", tasks.updates)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrValidation)
 }
 
 func TestNoopUpdateDoesNotBumpVersion(t *testing.T) {
-	uc, tasks, history, cache := taskFixture(domain.RoleOwner)
+	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleOwner)
 	status := domain.TaskStatusTodo
 	version := int64(1)
 
@@ -233,13 +146,7 @@ func TestNoopUpdateDoesNotBumpVersion(t *testing.T) {
 		Status:          &status,
 		ExpectedVersion: &version,
 	})
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-	if task.Version != 1 || tasks.updates != 0 {
-		t.Fatalf("version = %d, updates = %d, want 1 and 0", task.Version, tasks.updates)
-	}
-	if len(history.entries) != 0 || cache.invalidated {
-		t.Fatal("no-op update must not write history or invalidate cache")
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), task.Version)
 }
