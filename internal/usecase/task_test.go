@@ -10,10 +10,6 @@ import (
 	"secunda/internal/domain"
 )
 
-// --- shared helpers ---
-
-func ptrInt64(v int64) *int64 { return &v }
-
 type immediateTx struct{}
 
 func (immediateTx) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
@@ -38,7 +34,7 @@ func taskFixture(t *testing.T, role domain.Role) (*TaskUseCase, *MockTaskReposit
 		Title:      "Task",
 		Status:     domain.TaskStatusTodo,
 		CreatedBy:  1,
-		AssigneeID: ptrInt64(2),
+		AssigneeID: new(int64(2)),
 		Version:    1,
 	}
 
