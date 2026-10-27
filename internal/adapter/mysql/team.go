@@ -55,6 +55,22 @@ func (r *TeamRepository) ListByUser(ctx context.Context, userID int64) ([]domain
 	return teams, nil
 }
 
+func (r *TeamRepository) ListMembers(ctx context.Context, teamID int64) ([]domain.TeamMemberInfo, error) {
+	members := make([]domain.TeamMemberInfo, 0)
+	err := sqlx.SelectContext(ctx, ext(ctx, r.db), &members, `
+		SELECT u.id AS user_id, u.name, u.email, tm.role
+		FROM team_members tm
+		JOIN users u ON u.id = tm.user_id
+		WHERE tm.team_id = ?
+		ORDER BY FIELD(tm.role, 'owner', 'admin', 'member'), u.name, u.id`,
+		teamID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("select team members: %w", err)
+	}
+	return members, nil
+}
+
 func (r *TeamRepository) Membership(ctx context.Context, teamID, userID int64) (domain.Role, error) {
 	var role domain.Role
 	err := sqlx.GetContext(ctx, ext(ctx, r.db), &role,

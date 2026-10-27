@@ -44,6 +44,15 @@ func toAPITeamMember(member usecase.TeamMember) openapi.TeamMember {
 	}
 }
 
+func toAPITeamMemberInfo(member domain.TeamMemberInfo) openapi.TeamMemberInfo {
+	return openapi.TeamMemberInfo{
+		UserId: member.UserID,
+		Name:   member.Name,
+		Email:  openapi_types.Email(member.Email),
+		Role:   openapi.Role(member.Role),
+	}
+}
+
 func toAPITeamStats(stats domain.TeamStats) openapi.TeamStatsResponse {
 	topAssignees := make([]openapi.TopAssignee, 0, len(stats.TopAssignees))
 	for _, assignee := range stats.TopAssignees {

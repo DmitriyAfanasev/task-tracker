@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: up down logs ps run build test vet fmt openapigen migrate-up migrate-down test-integration
+.PHONY: up down logs ps run build test vet fmt openapigen migrate-up migrate-down test-integration web web-build
 
 up:
 	docker compose up --build -d
@@ -40,3 +40,9 @@ run:
 	DB_DSN="$$MYSQL_USER:$$MYSQL_PASSWORD@tcp(127.0.0.1:$$MYSQL_HOST_PORT)/$$MYSQL_DATABASE?parseTime=true&loc=UTC&charset=utf8mb4" \
 	REDIS_ADDR="127.0.0.1:$$REDIS_HOST_PORT" \
 	go run ./cmd/api
+
+web:
+	cd web && npm run dev
+
+web-build:
+	cd web && npm run build

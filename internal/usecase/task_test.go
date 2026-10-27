@@ -76,6 +76,9 @@ func (f *fakeTeamRepository) Create(context.Context, *domain.Team) error { retur
 func (f *fakeTeamRepository) ListByUser(context.Context, int64) ([]domain.TeamWithRole, error) {
 	return nil, nil
 }
+func (f *fakeTeamRepository) ListMembers(context.Context, int64) ([]domain.TeamMemberInfo, error) {
+	return nil, nil
+}
 func (f *fakeTeamRepository) Membership(context.Context, int64, int64) (domain.Role, error) {
 	return f.role, f.membershipErr
 }

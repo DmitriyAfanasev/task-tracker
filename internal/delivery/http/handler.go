@@ -18,6 +18,7 @@ type AuthUseCase interface {
 type TeamUseCase interface {
 	Create(ctx context.Context, cmd usecase.CreateTeamRequest) (*domain.Team, error)
 	List(ctx context.Context, userID int64) ([]domain.TeamWithRole, error)
+	ListMembers(ctx context.Context, callerID, teamID int64) ([]domain.TeamMemberInfo, error)
 	Invite(ctx context.Context, cmd usecase.InviteMemberRequest) (*usecase.TeamMember, error)
 }
 
@@ -151,6 +152,25 @@ func (h *Handler) InviteMember(ctx context.Context, request openapi.InviteMember
 	}
 
 	return openapi.InviteMember201JSONResponse(toAPITeamMember(*member)), nil
+}
+
+func (h *Handler) ListTeamMembers(ctx context.Context, request openapi.ListTeamMembersRequestObject) (openapi.ListTeamMembersResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	members, err := h.teams.ListMembers(ctx, userID, int64(request.Id))
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]openapi.TeamMemberInfo, 0, len(members))
+	for _, member := range members {
+		items = append(items, toAPITeamMemberInfo(member))
+	}
+
+	return openapi.ListTeamMembers200JSONResponse{Items: items}, nil
 }
 
 func (h *Handler) GetTeamStats(ctx context.Context, request openapi.GetTeamStatsRequestObject) (openapi.GetTeamStatsResponseObject, error) {

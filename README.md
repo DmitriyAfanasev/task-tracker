@@ -55,6 +55,7 @@ make up
 - API: <http://localhost:8080/api/v1>
 - Swagger UI: <http://localhost:8080/swagger/> (только вне `production`)
 - Health: <http://localhost:8080/healthz>, readiness: `/readyz`
+- Web UI: <http://localhost:5173> (`cd web && npm install && npm run dev`, проксирует `/api` на API)
 
 Полезные команды:
 

@@ -6,5 +6,9 @@ coverage.out
 .idea/
 .vscode/
 
+# Frontend
+web/node_modules/
+web/dist/
+
 # Исходное ТЗ
 redirect.pdf

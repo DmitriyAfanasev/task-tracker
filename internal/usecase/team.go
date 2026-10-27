@@ -69,6 +69,13 @@ func (uc *TeamUseCase) List(ctx context.Context, userID int64) ([]domain.TeamWit
 	return uc.teams.ListByUser(ctx, userID)
 }
 
+func (uc *TeamUseCase) ListMembers(ctx context.Context, callerID, teamID int64) ([]domain.TeamMemberInfo, error) {
+	if _, err := uc.teams.Membership(ctx, teamID, callerID); err != nil {
+		return nil, err
+	}
+	return uc.teams.ListMembers(ctx, teamID)
+}
+
 func (uc *TeamUseCase) Invite(ctx context.Context, cmd InviteMemberRequest) (*TeamMember, error) {
 	if cmd.UserID <= 0 {
 		return nil, domain.ErrValidation.WithDetails(map[string]string{"user_id": "должен быть больше 0"})

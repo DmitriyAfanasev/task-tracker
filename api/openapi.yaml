@@ -166,6 +166,30 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /teams/{id}/members:
+    get:
+      tags: [teams]
+      operationId: listTeamMembers
+      summary: Список участников команды
+      description: |
+        Доступен любому участнику команды. Не участник получает `404`,
+        чтобы не раскрывать существование чужой команды.
+      parameters:
+        - $ref: '#/components/parameters/TeamID'
+      responses:
+        '200':
+          description: Список участников
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMembersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /teams/{team_id}/stats:
     get:
       tags: [stats]
@@ -661,6 +685,33 @@ components:
           example: 2
         role:
           $ref: '#/components/schemas/Role'
+
+    TeamMemberInfo:
+      type: object
+      required: [user_id, name, email, role]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+          example: 2
+        name:
+          type: string
+          example: Пётр Иванов
+        email:
+          type: string
+          format: email
+          example: petr@example.com
+        role:
+          $ref: '#/components/schemas/Role'
+
+    TeamMembersResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamMemberInfo'
 
     TeamStatsResponse:
       type: object

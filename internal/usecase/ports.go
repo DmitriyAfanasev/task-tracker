@@ -18,6 +18,7 @@ type UserRepository interface {
 type TeamRepository interface {
 	Create(ctx context.Context, team *domain.Team) error
 	ListByUser(ctx context.Context, userID int64) ([]domain.TeamWithRole, error)
+	ListMembers(ctx context.Context, teamID int64) ([]domain.TeamMemberInfo, error)
 	Membership(ctx context.Context, teamID, userID int64) (domain.Role, error)
 	AddMember(ctx context.Context, teamID, userID int64, role domain.Role) error
 }

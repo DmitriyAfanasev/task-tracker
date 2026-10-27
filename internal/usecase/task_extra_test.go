@@ -18,6 +18,9 @@ func (c *countingTeamRepo) Create(context.Context, *domain.Team) error { return 
 func (c *countingTeamRepo) ListByUser(context.Context, int64) ([]domain.TeamWithRole, error) {
 	return nil, nil
 }
+func (c *countingTeamRepo) ListMembers(context.Context, int64) ([]domain.TeamMemberInfo, error) {
+	return nil, nil
+}
 func (c *countingTeamRepo) Membership(ctx context.Context, teamID, userID int64) (domain.Role, error) {
 	if c.membershipFn != nil {
 		return c.membershipFn(ctx, teamID, userID)

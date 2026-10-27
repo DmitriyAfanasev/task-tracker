@@ -53,6 +53,14 @@ type TeamWithRole struct {
 	Role      Role      `db:"role" json:"role" example:"owner"`
 }
 
+// TeamMemberInfo — участник команды с данными пользователя для UI.
+type TeamMemberInfo struct {
+	UserID int64  `db:"user_id" json:"user_id" example:"2"`
+	Name   string `db:"name" json:"name" example:"Пётр Иванов"`
+	Email  string `db:"email" json:"email" example:"petr@example.com"`
+	Role   Role   `db:"role" json:"role" example:"member"`
+}
+
 // TeamStats содержит агрегированный SQL-отчёт по одной команде.
 // AverageCloseSeconds равен nil, когда в команде нет завершённых задач.
 type TeamStats struct {

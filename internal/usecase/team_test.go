@@ -15,6 +15,8 @@ type fakeTeamRepo struct {
 	createErr     error
 	addMemberErr  error
 	inviteCall    int
+	members       []domain.TeamMemberInfo
+	listMembersErr error
 }
 
 func (f *fakeTeamRepo) Create(_ context.Context, team *domain.Team) error {
@@ -29,6 +31,13 @@ func (f *fakeTeamRepo) Create(_ context.Context, team *domain.Team) error {
 
 func (f *fakeTeamRepo) ListByUser(_ context.Context, _ int64) ([]domain.TeamWithRole, error) {
 	return nil, nil
+}
+
+func (f *fakeTeamRepo) ListMembers(_ context.Context, _ int64) ([]domain.TeamMemberInfo, error) {
+	if f.listMembersErr != nil {
+		return nil, f.listMembersErr
+	}
+	return f.members, nil
 }
 
 func (f *fakeTeamRepo) Membership(_ context.Context, _, _ int64) (domain.Role, error) {
@@ -367,5 +376,34 @@ func TestInviteReturnsTeamMember(t *testing.T) {
 	}
 	if member.Role != domain.RoleMember {
 		t.Fatalf("role = %v, want member", member.Role)
+	}
+}
+
+func TestListMembersRequiresMembership(t *testing.T) {
+	uc, teams, _ := newFakeTeamUC(domain.RoleMember)
+	teams.membershipErr = domain.ErrTeamNotFound
+
+	_, err := uc.ListMembers(context.Background(), 1, 10)
+	if !errors.Is(err, domain.ErrTeamNotFound) {
+		t.Fatalf("error = %v, want ErrTeamNotFound", err)
+	}
+}
+
+func TestListMembersReturnsMembers(t *testing.T) {
+	uc, teams, _ := newFakeTeamUC(domain.RoleMember)
+	teams.members = []domain.TeamMemberInfo{
+		{UserID: 1, Name: "Иван", Email: "ivan@example.com", Role: domain.RoleOwner},
+		{UserID: 2, Name: "Пётр", Email: "petr@example.com", Role: domain.RoleMember},
+	}
+
+	got, err := uc.ListMembers(context.Background(), 1, 10)
+	if err != nil {
+		t.Fatalf("ListMembers() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].Name != "Иван" || got[1].UserID != 2 {
+		t.Fatalf("unexpected members: %+v", got)
 	}
 }
