@@ -2,310 +2,291 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 
 	"secunda/internal/domain"
 )
 
-type fakeTeamRepo struct {
-	team          *domain.Team
-	membership    domain.Role
-	membershipErr error
-	createErr     error
-	addMemberErr  error
-	inviteCall    int
+// --- Create fixtures ---
+
+func newCreateTeamUC(t *testing.T, role domain.Role) (*TeamUseCase, *MockTeamRepository) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	teams := NewMockTeamRepository(ctrl)
+
+	// Create не требует membership, но AddMember вызывается внутри транзакции.
+	// membership не ставим AnyTimes — Create не проверяет роль.
+
+	uc := NewTeamUseCase(teams, NewMockUserRepository(ctrl), immediateTx{})
+	return uc, teams
 }
 
-func (f *fakeTeamRepo) Create(_ context.Context, team *domain.Team) error {
-	if f.createErr != nil {
-		return f.createErr
-	}
-	if f.team != nil {
-		*f.team = *team
-	}
-	return nil
-}
+// --- Invite fixtures ---
 
-func (f *fakeTeamRepo) ListByUser(_ context.Context, _ int64) ([]domain.TeamWithRole, error) {
-	return nil, nil
-}
+func newInviteUC(t *testing.T, role domain.Role) (*TeamUseCase, *MockTeamRepository, *MockUserRepository) {
+	t.Helper()
 
-func (f *fakeTeamRepo) Membership(_ context.Context, _, _ int64) (domain.Role, error) {
-	return f.membership, f.membershipErr
-}
+	ctrl := gomock.NewController(t)
+	teams := NewMockTeamRepository(ctrl)
+	users := NewMockUserRepository(ctrl)
 
-func (f *fakeTeamRepo) AddMember(_ context.Context, _, _ int64, _ domain.Role) error {
-	f.inviteCall++
-	return f.addMemberErr
-}
+	// Membership и GetByID не ставим — каждый тест настраивает свои ожидания.
 
-type fakeUserRepoForInvite struct {
-	exists   bool
-	notFound bool
-}
-
-func (f *fakeUserRepoForInvite) Create(_ context.Context, _ *domain.User) error {
-	return nil
-}
-
-func (f *fakeUserRepoForInvite) GetByID(_ context.Context, _ int64) (*domain.User, error) {
-	if f.notFound {
-		return nil, domain.ErrUserNotFound
-	}
-	if !f.exists {
-		return nil, domain.ErrUserNotFound
-	}
-	return &domain.User{ID: 1}, nil
-}
-
-func (f *fakeUserRepoForInvite) GetByEmail(_ context.Context, _ string) (*domain.User, error) {
-	return nil, domain.ErrUserNotFound
-}
-
-func newFakeTeamUC(role domain.Role) (*TeamUseCase, *fakeTeamRepo, *fakeUserRepoForInvite) {
-	teams := &fakeTeamRepo{membership: role}
-	users := &fakeUserRepoForInvite{exists: true}
 	uc := NewTeamUseCase(teams, users, immediateTx{})
 	return uc, teams, users
 }
 
-// --- Create ---
+// --- Create tests ---
 
 func TestCreateTeamRejectsEmptyName(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, _ := newCreateTeamUC(t, domain.RoleOwner)
 	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "",
 	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrValidation)
 }
 
 func TestCreateTeamRejectsLongName(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, _ := newCreateTeamUC(t, domain.RoleOwner)
 	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    string(make([]rune, 101)),
 	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrValidation)
 }
 
 func TestCreateTeamTrimsWhitespace(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, teams := newCreateTeamUC(t, domain.RoleOwner)
+	var capturedName string
+
+	teams.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, t *domain.Team) error {
+		capturedName = t.Name
+		return nil
+	}).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	team, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "  My Team  ",
 	})
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if team.Name != "My Team" {
-		t.Fatalf("name = %q, want My Team", team.Name)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, "My Team", team.Name)
+	assert.Equal(t, "My Team", capturedName)
 }
 
 func TestCreateTeamSetsCreatedBy(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, teams := newCreateTeamUC(t, domain.RoleOwner)
+	var capturedOwner int64
+
+	teams.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, t *domain.Team) error {
+		capturedOwner = t.CreatedBy
+		return nil
+	}).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	team, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 42,
 		Name:    "Test Team",
 	})
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if team.CreatedBy != 42 {
-		t.Fatalf("created_by = %d, want 42", team.CreatedBy)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(42), team.CreatedBy)
+	assert.Equal(t, int64(42), capturedOwner)
 }
 
 func TestCreateTeamAddsOwnerAsMember(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, teams := newCreateTeamUC(t, domain.RoleOwner)
+
+	teams.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "Team",
 	})
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if teams.inviteCall != 1 {
-		t.Fatalf("AddMember calls = %d, want 1", teams.inviteCall)
-	}
+
+	assert.NoError(t, err)
 }
 
 func TestCreateTeamPropagatesCreateError(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	teams.createErr = domain.ErrInternal
+	uc, teams := newCreateTeamUC(t, domain.RoleOwner)
+
+	teams.EXPECT().Create(gomock.Any(), gomock.Any()).Return(domain.ErrInternal).Times(1)
 
 	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "Team",
 	})
-	if !errors.Is(err, domain.ErrInternal) {
-		t.Fatalf("error = %v, want ErrInternal", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrInternal)
 }
 
 func TestCreateTeamPropagatesAddMemberError(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	teams.addMemberErr = domain.ErrInternal
+	uc, teams := newCreateTeamUC(t, domain.RoleOwner)
+
+	teams.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(domain.ErrInternal).Times(1)
 
 	_, err := uc.Create(context.Background(), CreateTeamRequest{
 		OwnerID: 1,
 		Name:    "Team",
 	})
-	if !errors.Is(err, domain.ErrInternal) {
-		t.Fatalf("error = %v, want ErrInternal", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrInternal)
 }
 
-// --- Invite ---
+// --- Invite tests ---
 
 func TestInviteRejectsZeroUserID(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, _, _ := newInviteUC(t, domain.RoleOwner)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   0,
 		Role:     domain.RoleMember,
 	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrValidation)
 }
 
 func TestInviteRejectsNegativeUserID(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, _, _ := newInviteUC(t, domain.RoleOwner)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   -1,
 		Role:     domain.RoleMember,
 	})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("error = %v, want ErrValidation", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrValidation)
 }
 
 func TestInviteRejectsOwnerRole(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, _, _ := newInviteUC(t, domain.RoleOwner)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleOwner,
 	})
-	if !errors.Is(err, domain.ErrInvalidRole) {
-		t.Fatalf("error = %v, want ErrInvalidRole", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrInvalidRole)
 }
 
 func TestInviteRejectsInvalidRole(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, _, _ := newInviteUC(t, domain.RoleOwner)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.Role("invalid"),
 	})
-	if !errors.Is(err, domain.ErrInvalidRole) {
-		t.Fatalf("error = %v, want ErrInvalidRole", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrInvalidRole)
 }
 
 func TestInviteRejectsMemberAsCaller(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleMember)
+	uc, teams, _ := newInviteUC(t, domain.RoleMember)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleMember, nil).Times(1)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleMember,
 	})
-	if !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("error = %v, want ErrForbidden", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrForbidden)
 }
 
 func TestInviteRejectsAdminInvitingAdmin(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleAdmin)
+	uc, teams, _ := newInviteUC(t, domain.RoleAdmin)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleAdmin, nil).Times(1)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleAdmin,
 	})
-	if !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("error = %v, want ErrForbidden", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrForbidden)
 }
 
 func TestInviteRejectsAdminInvitingOwner(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleAdmin)
+	uc, _, _ := newInviteUC(t, domain.RoleAdmin)
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleOwner,
 	})
-	if !errors.Is(err, domain.ErrInvalidRole) {
-		t.Fatalf("error = %v, want ErrInvalidRole", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrInvalidRole)
 }
 
 func TestInviteSucceedsForOwnerInvitingAdmin(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberRequest{
+	uc, teams, users := newInviteUC(t, domain.RoleOwner)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleOwner, nil).Times(1)
+	users.EXPECT().GetByID(gomock.Any(), int64(2)).Return(&domain.User{ID: 2}, nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), int64(1), int64(2), domain.RoleAdmin).Return(nil).Times(1)
+
+	member, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleAdmin,
 	})
-	if err != nil {
-		t.Fatalf("Invite() error = %v", err)
-	}
-	if teams.inviteCall != 1 {
-		t.Fatalf("AddMember calls = %d, want 1", teams.inviteCall)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), member.TeamID)
+	assert.Equal(t, int64(2), member.UserID)
+	assert.Equal(t, domain.RoleAdmin, member.Role)
 }
 
 func TestInviteSucceedsForOwnerInvitingMember(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	_, err := uc.Invite(context.Background(), InviteMemberRequest{
+	uc, teams, users := newInviteUC(t, domain.RoleOwner)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleOwner, nil).Times(1)
+	users.EXPECT().GetByID(gomock.Any(), int64(2)).Return(&domain.User{ID: 2}, nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), int64(1), int64(2), domain.RoleMember).Return(nil).Times(1)
+
+	member, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleMember,
 	})
-	if err != nil {
-		t.Fatalf("Invite() error = %v", err)
-	}
-	if teams.inviteCall != 1 {
-		t.Fatalf("AddMember calls = %d, want 1", teams.inviteCall)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, domain.RoleMember, member.Role)
 }
 
 func TestInviteSucceedsForAdminInvitingMember(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleAdmin)
-	_, err := uc.Invite(context.Background(), InviteMemberRequest{
+	uc, teams, users := newInviteUC(t, domain.RoleAdmin)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleAdmin, nil).Times(1)
+	users.EXPECT().GetByID(gomock.Any(), int64(2)).Return(&domain.User{ID: 2}, nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), int64(1), int64(2), domain.RoleMember).Return(nil).Times(1)
+
+	member, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   1,
 		UserID:   2,
 		Role:     domain.RoleMember,
 	})
-	if err != nil {
-		t.Fatalf("Invite() error = %v", err)
-	}
-	if teams.inviteCall != 1 {
-		t.Fatalf("AddMember calls = %d, want 1", teams.inviteCall)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, domain.RoleMember, member.Role)
 }
 
 func TestInvitePropagatesMembershipError(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	teams.membershipErr = domain.ErrInternal
+	uc, teams, _ := newInviteUC(t, domain.RoleOwner)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleOwner, domain.ErrInternal).Times(1)
 
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
@@ -313,14 +294,14 @@ func TestInvitePropagatesMembershipError(t *testing.T) {
 		UserID:   2,
 		Role:     domain.RoleMember,
 	})
-	if !errors.Is(err, domain.ErrInternal) {
-		t.Fatalf("error = %v, want ErrInternal", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrInternal)
 }
 
 func TestInvitePropagatesUserNotFoundError(t *testing.T) {
-	uc, _, users := newFakeTeamUC(domain.RoleOwner)
-	users.exists = false
+	uc, teams, users := newInviteUC(t, domain.RoleOwner)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleOwner, nil).Times(1)
+	users.EXPECT().GetByID(gomock.Any(), int64(999)).Return(nil, domain.ErrUserNotFound).Times(1)
 
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
@@ -328,14 +309,15 @@ func TestInvitePropagatesUserNotFoundError(t *testing.T) {
 		UserID:   999,
 		Role:     domain.RoleMember,
 	})
-	if !errors.Is(err, domain.ErrUserNotFound) {
-		t.Fatalf("error = %v, want ErrUserNotFound", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrUserNotFound)
 }
 
 func TestInvitePropagatesAddMemberError(t *testing.T) {
-	uc, teams, _ := newFakeTeamUC(domain.RoleOwner)
-	teams.addMemberErr = domain.ErrAlreadyMember
+	uc, teams, users := newInviteUC(t, domain.RoleOwner)
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleOwner, nil).Times(1)
+	users.EXPECT().GetByID(gomock.Any(), int64(2)).Return(&domain.User{ID: 2}, nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), int64(1), int64(2), domain.RoleMember).Return(domain.ErrAlreadyMember).Times(1)
 
 	_, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
@@ -343,29 +325,25 @@ func TestInvitePropagatesAddMemberError(t *testing.T) {
 		UserID:   2,
 		Role:     domain.RoleMember,
 	})
-	if !errors.Is(err, domain.ErrAlreadyMember) {
-		t.Fatalf("error = %v, want ErrAlreadyMember", err)
-	}
+
+	assert.ErrorIs(t, err, domain.ErrAlreadyMember)
 }
 
 func TestInviteReturnsTeamMember(t *testing.T) {
-	uc, _, _ := newFakeTeamUC(domain.RoleOwner)
+	uc, teams, users := newInviteUC(t, domain.RoleOwner)
+	teams.EXPECT().Membership(gomock.Any(), int64(42), gomock.Any()).Return(domain.RoleOwner, nil).Times(1)
+	users.EXPECT().GetByID(gomock.Any(), int64(99)).Return(&domain.User{ID: 99}, nil).Times(1)
+	teams.EXPECT().AddMember(gomock.Any(), int64(42), int64(99), domain.RoleMember).Return(nil).Times(1)
+
 	member, err := uc.Invite(context.Background(), InviteMemberRequest{
 		CallerID: 1,
 		TeamID:   42,
 		UserID:   99,
 		Role:     domain.RoleMember,
 	})
-	if err != nil {
-		t.Fatalf("Invite() error = %v", err)
-	}
-	if member.TeamID != 42 {
-		t.Fatalf("team_id = %d, want 42", member.TeamID)
-	}
-	if member.UserID != 99 {
-		t.Fatalf("user_id = %d, want 99", member.UserID)
-	}
-	if member.Role != domain.RoleMember {
-		t.Fatalf("role = %v, want member", member.Role)
-	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(42), member.TeamID)
+	assert.Equal(t, int64(99), member.UserID)
+	assert.Equal(t, domain.RoleMember, member.Role)
 }
