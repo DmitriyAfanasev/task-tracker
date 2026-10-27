@@ -16,40 +16,132 @@ func (immediateTx) WithinTransaction(ctx context.Context, fn func(context.Contex
 	return fn(ctx)
 }
 
-// --- helpers ---
+// --- Update fixtures ---
 
-func taskFixture(t *testing.T, role domain.Role) (*TaskUseCase, *MockTaskRepository, *MockTaskHistoryRepository, *MockTaskCommentRepository, *MockTeamRepository, *MockTaskListCache, *gomock.Controller) {
+func newUpdateUC(t *testing.T, role domain.Role, task *domain.Task) (*TaskUseCase, *MockTaskRepository, *MockTaskHistoryRepository, *MockTaskListCache) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	tasks := NewMockTaskRepository(ctrl)
 	history := NewMockTaskHistoryRepository(ctrl)
-	comments := NewMockTaskCommentRepository(ctrl)
 	teams := NewMockTeamRepository(ctrl)
 	cache := NewMockTaskListCache(ctrl)
 
-	task := &domain.Task{
-		ID:         10,
-		TeamID:     1,
-		Title:      "Task",
-		Status:     domain.TaskStatusTodo,
-		CreatedBy:  1,
-		AssigneeID: new(int64(2)),
-		Version:    1,
+	if task == nil {
+		task = &domain.Task{
+			ID:         10,
+			TeamID:     1,
+			Title:      "Task",
+			Status:     domain.TaskStatusTodo,
+			CreatedBy:  1,
+			AssigneeID: new(int64(2)),
+			Version:    1,
+		}
 	}
 
-	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
 	tasks.EXPECT().GetForUpdate(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
 	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(role, nil).AnyTimes()
 
-	uc := NewTaskUseCase(tasks, history, comments, teams, cache, immediateTx{})
-	return uc, tasks, history, comments, teams, cache, ctrl
+	uc := NewTaskUseCase(tasks, history, NewMockTaskCommentRepository(ctrl), teams, cache, immediateTx{})
+	return uc, tasks, history, cache
 }
 
-// --- tests ---
+// --- Create fixtures ---
+
+func newCreateUC(t *testing.T, role domain.Role) (*TaskUseCase, *MockTaskRepository, *MockTaskHistoryRepository, *MockTaskListCache) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	tasks := NewMockTaskRepository(ctrl)
+	history := NewMockTaskHistoryRepository(ctrl)
+	teams := NewMockTeamRepository(ctrl)
+	cache := NewMockTaskListCache(ctrl)
+
+	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(role, nil).AnyTimes()
+
+	uc := NewTaskUseCase(tasks, history, NewMockTaskCommentRepository(ctrl), teams, cache, immediateTx{})
+	return uc, tasks, history, cache
+}
+
+// --- List fixtures ---
+
+func newListUC(t *testing.T, role domain.Role) (*TaskUseCase, *MockTeamRepository) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	teams := NewMockTeamRepository(ctrl)
+
+	// Membership не ставим — тесты валидации падают до вызова membership,
+	// а TestListTasksChecksTeamMembership переопределяет её на ErrForbidden.
+
+	uc := NewTaskUseCase(NewMockTaskRepository(ctrl), NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
+	return uc, teams
+}
+
+// --- History fixtures ---
+
+func newHistoryUC(t *testing.T, role domain.Role, task *domain.Task) (*TaskUseCase, *MockTaskRepository, *MockTeamRepository) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	tasks := NewMockTaskRepository(ctrl)
+	teams := NewMockTeamRepository(ctrl)
+
+	if task == nil {
+		task = &domain.Task{ID: 10, TeamID: 1}
+	}
+
+	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
+	// Membership не ставим — тесты переопределяют её на ErrForbidden.
+
+	uc := NewTaskUseCase(tasks, NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
+	return uc, tasks, teams
+}
+
+// --- AddComment fixtures ---
+
+func newAddCommentUC(t *testing.T, role domain.Role, task *domain.Task) (*TaskUseCase, *MockTaskRepository, *MockTeamRepository) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	tasks := NewMockTaskRepository(ctrl)
+	teams := NewMockTeamRepository(ctrl)
+
+	if task == nil {
+		task = &domain.Task{ID: 10, TeamID: 1}
+	}
+
+	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
+	// Membership не ставим — тесты переопределяют её на ErrForbidden.
+
+	uc := NewTaskUseCase(tasks, NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
+	return uc, tasks, teams
+}
+
+// --- Comments fixtures ---
+
+func newCommentsUC(t *testing.T, role domain.Role, task *domain.Task) (*TaskUseCase, *MockTaskRepository, *MockTeamRepository) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	tasks := NewMockTaskRepository(ctrl)
+	teams := NewMockTeamRepository(ctrl)
+
+	if task == nil {
+		task = &domain.Task{ID: 10, TeamID: 1}
+	}
+
+	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(task, nil).AnyTimes()
+	// Membership не ставим — тесты переопределяют её на ErrForbidden.
+
+	uc := NewTaskUseCase(tasks, NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
+	return uc, tasks, teams
+}
+
+// --- Update tests ---
 
 func TestUpdateTaskBumpsVersionAndWritesHistory(t *testing.T) {
-	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleMember)
+	uc, tasks, history, cache := newUpdateUC(t, domain.RoleMember, nil)
 	status := domain.TaskStatusInProgress
 	version := int64(1)
 
@@ -69,7 +161,7 @@ func TestUpdateTaskBumpsVersionAndWritesHistory(t *testing.T) {
 }
 
 func TestAssigneeCannotEditTitle(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _, _ := newUpdateUC(t, domain.RoleMember, nil)
 	title := "Hacked"
 	version := int64(1)
 
@@ -84,7 +176,7 @@ func TestAssigneeCannotEditTitle(t *testing.T) {
 }
 
 func TestOwnerCanEditTask(t *testing.T) {
-	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleOwner)
+	uc, tasks, history, cache := newUpdateUC(t, domain.RoleOwner, nil)
 	title := "Renamed"
 	version := int64(1)
 
@@ -104,7 +196,7 @@ func TestOwnerCanEditTask(t *testing.T) {
 }
 
 func TestStaleVersionConflicts(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleOwner)
+	uc, _, _, _ := newUpdateUC(t, domain.RoleOwner, nil)
 	status := domain.TaskStatusInProgress
 	version := int64(99)
 
@@ -119,7 +211,7 @@ func TestStaleVersionConflicts(t *testing.T) {
 }
 
 func TestUpdateRequiresVersion(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleOwner)
+	uc, _, _, _ := newUpdateUC(t, domain.RoleOwner, nil)
 	status := domain.TaskStatusInProgress
 
 	_, err := uc.Update(context.Background(), UpdateTaskRequest{
@@ -132,7 +224,7 @@ func TestUpdateRequiresVersion(t *testing.T) {
 }
 
 func TestNoopUpdateDoesNotBumpVersion(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleOwner)
+	uc, _, _, _ := newUpdateUC(t, domain.RoleOwner, nil)
 	status := domain.TaskStatusTodo
 	version := int64(1)
 

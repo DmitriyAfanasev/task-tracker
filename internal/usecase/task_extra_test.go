@@ -13,7 +13,7 @@ import (
 // --- Create ---
 
 func TestCreateTaskRejectsZeroTeamID(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _, _ := newCreateUC(t, domain.RoleMember)
 	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		Title:  "Task",
@@ -23,7 +23,7 @@ func TestCreateTaskRejectsZeroTeamID(t *testing.T) {
 }
 
 func TestCreateTaskRejectsEmptyTitle(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _, _ := newCreateUC(t, domain.RoleMember)
 	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
@@ -34,7 +34,7 @@ func TestCreateTaskRejectsEmptyTitle(t *testing.T) {
 }
 
 func TestCreateTaskRejectsLongTitle(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _, _ := newCreateUC(t, domain.RoleMember)
 	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
 		TeamID: 1,
@@ -45,7 +45,7 @@ func TestCreateTaskRejectsLongTitle(t *testing.T) {
 }
 
 func TestCreateTaskRejectsLongDescription(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _, _ := newCreateUC(t, domain.RoleMember)
 	long := string(make([]rune, 5001))
 	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID:      1,
@@ -58,7 +58,7 @@ func TestCreateTaskRejectsLongDescription(t *testing.T) {
 }
 
 func TestCreateTaskRejectsInvalidStatus(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _, _ := newCreateUC(t, domain.RoleMember)
 	status := domain.TaskStatus("invalid")
 	_, err := uc.Create(context.Background(), CreateTaskRequest{
 		UserID: 1,
@@ -86,7 +86,7 @@ func TestCreateTaskChecksTeamMembership(t *testing.T) {
 }
 
 func TestCreateTaskWritesHistoryEntry(t *testing.T) {
-	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleMember)
+	uc, tasks, history, cache := newCreateUC(t, domain.RoleMember)
 	tasks.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, t *domain.Task) error {
 		t.ID = 1
 		return nil
@@ -108,7 +108,7 @@ func TestCreateTaskWritesHistoryEntry(t *testing.T) {
 }
 
 func TestCreateTaskSetsDefaultStatus(t *testing.T) {
-	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleMember)
+	uc, tasks, history, cache := newCreateUC(t, domain.RoleMember)
 	tasks.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, t *domain.Task) error {
 		t.ID = 1
 		t.Status = domain.TaskStatusTodo
@@ -130,7 +130,7 @@ func TestCreateTaskSetsDefaultStatus(t *testing.T) {
 }
 
 func TestCreateTaskSetsClosedAtForDoneStatus(t *testing.T) {
-	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleMember)
+	uc, tasks, history, cache := newCreateUC(t, domain.RoleMember)
 	status := domain.TaskStatusDone
 	tasks.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, t *domain.Task) error {
 		t.ID = 1
@@ -152,7 +152,7 @@ func TestCreateTaskSetsClosedAtForDoneStatus(t *testing.T) {
 }
 
 func TestCreateTaskTrimsTitle(t *testing.T) {
-	uc, tasks, history, _, _, cache, _ := taskFixture(t, domain.RoleMember)
+	uc, tasks, history, cache := newCreateUC(t, domain.RoleMember)
 	var capturedTitle string
 	tasks.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, t *domain.Task) error {
 		capturedTitle = t.Title
@@ -175,7 +175,7 @@ func TestCreateTaskTrimsTitle(t *testing.T) {
 // --- List ---
 
 func TestListTasksRejectsZeroTeamID(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _ := newListUC(t, domain.RoleMember)
 	_, err := uc.List(context.Background(), ListTasksQuery{
 		UserID: 1,
 		TeamID: 0,
@@ -185,7 +185,7 @@ func TestListTasksRejectsZeroTeamID(t *testing.T) {
 }
 
 func TestListTasksRejectsInvalidStatus(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _ := newListUC(t, domain.RoleMember)
 	status := domain.TaskStatus("invalid")
 	_, err := uc.List(context.Background(), ListTasksQuery{
 		UserID: 1,
@@ -197,7 +197,7 @@ func TestListTasksRejectsInvalidStatus(t *testing.T) {
 }
 
 func TestListTasksRejectsZeroAssigneeID(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _ := newListUC(t, domain.RoleMember)
 	assignee := int64(0)
 	_, err := uc.List(context.Background(), ListTasksQuery{
 		UserID:     1,
@@ -209,10 +209,8 @@ func TestListTasksRejectsZeroAssigneeID(t *testing.T) {
 }
 
 func TestListTasksChecksTeamMembership(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	teams := NewMockTeamRepository(ctrl)
+	uc, teams := newListUC(t, domain.RoleMember)
 	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleMember, domain.ErrForbidden)
-	uc := NewTaskUseCase(NewMockTaskRepository(ctrl), NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
 
 	_, err := uc.List(context.Background(), ListTasksQuery{
 		UserID: 1,
@@ -225,12 +223,8 @@ func TestListTasksChecksTeamMembership(t *testing.T) {
 // --- History ---
 
 func TestHistoryChecksTeamMembership(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	tasks := NewMockTaskRepository(ctrl)
-	teams := NewMockTeamRepository(ctrl)
-	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(&domain.Task{ID: 10, TeamID: 1}, nil)
+	uc, _, teams := newHistoryUC(t, domain.RoleMember, nil)
 	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleMember, domain.ErrForbidden)
-	uc := NewTaskUseCase(tasks, NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
 
 	_, err := uc.History(context.Background(), 1, 10)
 
@@ -240,7 +234,7 @@ func TestHistoryChecksTeamMembership(t *testing.T) {
 // --- AddComment ---
 
 func TestAddCommentRejectsEmptyContent(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _ := newAddCommentUC(t, domain.RoleMember, nil)
 	_, err := uc.AddComment(context.Background(), AddCommentRequest{
 		UserID:  1,
 		TaskID:  10,
@@ -251,7 +245,7 @@ func TestAddCommentRejectsEmptyContent(t *testing.T) {
 }
 
 func TestAddCommentRejectsLongContent(t *testing.T) {
-	uc, _, _, _, _, _, _ := taskFixture(t, domain.RoleMember)
+	uc, _, _ := newAddCommentUC(t, domain.RoleMember, nil)
 	long := string(make([]rune, 5001))
 	_, err := uc.AddComment(context.Background(), AddCommentRequest{
 		UserID:  1,
@@ -263,12 +257,8 @@ func TestAddCommentRejectsLongContent(t *testing.T) {
 }
 
 func TestAddCommentChecksTeamMembership(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	tasks := NewMockTaskRepository(ctrl)
-	teams := NewMockTeamRepository(ctrl)
-	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(&domain.Task{ID: 10, TeamID: 1}, nil)
+	uc, _, teams := newAddCommentUC(t, domain.RoleMember, nil)
 	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleMember, domain.ErrForbidden)
-	uc := NewTaskUseCase(tasks, NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
 
 	_, err := uc.AddComment(context.Background(), AddCommentRequest{
 		UserID:  1,
@@ -282,12 +272,8 @@ func TestAddCommentChecksTeamMembership(t *testing.T) {
 // --- Comments ---
 
 func TestCommentsChecksTeamMembership(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	tasks := NewMockTaskRepository(ctrl)
-	teams := NewMockTeamRepository(ctrl)
-	tasks.EXPECT().GetByID(gomock.Any(), int64(10)).Return(&domain.Task{ID: 10, TeamID: 1}, nil)
+	uc, _, teams := newCommentsUC(t, domain.RoleMember, nil)
 	teams.EXPECT().Membership(gomock.Any(), int64(1), gomock.Any()).Return(domain.RoleMember, domain.ErrForbidden)
-	uc := NewTaskUseCase(tasks, NewMockTaskHistoryRepository(ctrl), NewMockTaskCommentRepository(ctrl), teams, NewMockTaskListCache(ctrl), immediateTx{})
 
 	_, err := uc.Comments(context.Background(), ListCommentsQuery{
 		UserID: 1,
