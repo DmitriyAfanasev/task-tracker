@@ -75,7 +75,8 @@ services:
       - "--web.console.templates=/etc/prometheus/consoles"
       - "--web.console.libraries=/etc/prometheus/libraries"
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     restart: on-failure
 
   grafana:

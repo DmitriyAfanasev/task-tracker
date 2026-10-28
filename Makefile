@@ -41,6 +41,18 @@ run:
 	REDIS_ADDR="127.0.0.1:$$REDIS_HOST_PORT" \
 	go run ./cmd/api
 
+migrate-up:
+	@if [ ! -f .env ]; then echo "Error: .env not found. Copy .env.example to .env and edit it." >&2; exit 1; fi
+	@(set -a; . ./.env; set +a; \
+	DSN=$${DB_DSN:-$${MYSQL_USER}:$${MYSQL_PASSWORD}@tcp(127.0.0.1:$${MYSQL_HOST_PORT:-3306})/$${MYSQL_DATABASE}?parseTime=true&loc=UTC&charset=utf8mb4}; \
+	go run github.com/pressly/goose/v3/cmd/goose -dir migrations mysql "$$DSN" up)
+
+migrate-down:
+	@if [ ! -f .env ]; then echo "Error: .env not found. Copy .env.example to .env and edit it." >&2; exit 1; fi
+	@(set -a; . ./.env; set +a; \
+	DSN=$${DB_DSN:-$${MYSQL_USER}:$${MYSQL_PASSWORD}@tcp(127.0.0.1:$${MYSQL_HOST_PORT:-3306})/$${MYSQL_DATABASE}?parseTime=true&loc=UTC&charset=utf8mb4}; \
+	go run github.com/pressly/goose/v3/cmd/goose -dir migrations mysql "$$DSN" down)
+
 web:
 	cd web && npm run dev
 
