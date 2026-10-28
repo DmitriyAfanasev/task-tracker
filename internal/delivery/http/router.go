@@ -10,6 +10,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 
@@ -36,7 +37,7 @@ type NewRouterOptions struct {
 
 // NewRouter собирает HTTP-слой: инфраструктурные middleware, health,
 // Swagger UI и сгенерированный по OpenAPI роутер с JWT-аутентификацией.
-func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, redisClient *redis.Client, log *slog.Logger, opts NewRouterOptions) (http.Handler, error) {
+func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, redisClient *redis.Client, log *slog.Logger, opts NewRouterOptions, metrics *Metrics, businessMetrics *BusinessMetrics) (http.Handler, error) {
 	spec, err := openapi.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
@@ -49,6 +50,7 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, redisClient *r
 	router := chi.NewRouter()
 	router.Use(RequestID)
 	router.Use(RequestLogger(log))
+	router.Use(PrometheusMiddleware(metrics))
 	router.Use(Recoverer(log))
 	router.Use(chimiddleware.Timeout(30 * time.Second))
 
@@ -56,6 +58,8 @@ func NewRouter(handler *Handler, tokens TokenParser, db *sqlx.DB, redisClient *r
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	router.Get("/readyz", readiness(db))
+	router.Get("/metrics", promhttp.Handler().ServeHTTP)
+	router.Get("/business/metrics", promhttp.Handler().ServeHTTP)
 
 	if opts.EnableSwagger {
 		router.Get("/swagger/doc.json", func(w http.ResponseWriter, _ *http.Request) {
@@ -108,7 +112,7 @@ func registerSwaggerUI(router chi.Router) {
 
 	router.Get("/swagger", redirectToIndex)
 	router.Get("/swagger/", serveIndex)
-	router.Get("/swagger/index.html", redirectToIndex)
+	router.Get("/swagger/index.html", serveIndex)
 	router.Get("/swagger/*", handler)
 }
 

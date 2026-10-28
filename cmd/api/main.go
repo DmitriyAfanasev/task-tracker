@@ -35,6 +35,9 @@ func run() error {
 		With("service", "secunda", "env", cfg.Env)
 	slog.SetDefault(logger)
 
+	metrics := httpapi.NewMetrics()
+	businessMetrics := httpapi.NewBusinessMetrics()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -79,7 +82,7 @@ func run() error {
 		EnableSwagger:       !cfg.IsProduction(),
 		RateLimitGlobalRate: cfg.RateLimitGlobalRate,
 		RateLimitAuthRate:   cfg.RateLimitAuthRate,
-	})
+	}, metrics, businessMetrics)
 	if err != nil {
 		return err
 	}
