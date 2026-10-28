@@ -1,5 +1,7 @@
 package usecase
 
+//go:generate go run github.com/golang/mock/mockgen -source=ports.go -package usecase -destination=mocks_ports.go
+
 import (
 	"context"
 	"time"
