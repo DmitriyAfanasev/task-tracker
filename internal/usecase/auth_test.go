@@ -305,3 +305,42 @@ func TestNormalizeEmailRejectsLongEmail(t *testing.T) {
 	_, err := normalizeEmail(string(make([]byte, 256)) + "@a.co")
 	assert.Error(t, err)
 }
+
+// --- Get tests ---
+
+func newGetUC(t *testing.T, user *domain.User) (*AuthUseCase, *MockUserRepository, *MockTokenIssuer, *MockPasswordHasher) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	users := NewMockUserRepository(ctrl)
+	tokens := NewMockTokenIssuer(ctrl)
+	hasher := NewMockPasswordHasher(ctrl)
+
+	if user != nil {
+		users.EXPECT().GetByID(gomock.Any(), gomock.Any()).Return(user, nil).AnyTimes()
+	} else {
+		users.EXPECT().GetByID(gomock.Any(), gomock.Any()).Return(nil, domain.ErrUserNotFound).AnyTimes()
+	}
+
+	uc := NewAuthUseCase(users, tokens, hasher)
+	return uc, users, tokens, hasher
+}
+
+func TestGetReturnsUser(t *testing.T) {
+	uc, _, _, _ := newGetUC(t, &domain.User{ID: 42, Email: "alice@example.com", Name: "Алиса"})
+
+	user, err := uc.Get(context.Background(), 42)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(42), user.ID)
+	assert.Equal(t, "alice@example.com", user.Email)
+	assert.Equal(t, "Алиса", user.Name)
+}
+
+func TestGetPropagatesUserNotFound(t *testing.T) {
+	uc, _, _, _ := newGetUC(t, nil)
+
+	_, err := uc.Get(context.Background(), 99)
+
+	assert.ErrorIs(t, err, domain.ErrUserNotFound)
+}

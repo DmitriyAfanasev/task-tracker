@@ -101,6 +101,14 @@ func (uc *AuthUseCase) Login(ctx context.Context, cmd LoginRequest) (*AuthResult
 	return uc.issueToken(user)
 }
 
+func (uc *AuthUseCase) Get(ctx context.Context, userID int64) (*domain.User, error) {
+	user, err := uc.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (uc *AuthUseCase) issueToken(user *domain.User) (*AuthResult, error) {
 	token, expiresAt, err := uc.tokens.Issue(user.ID)
 	if err != nil {

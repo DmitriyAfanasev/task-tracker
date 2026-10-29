@@ -54,6 +54,24 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Данные текущего пользователя
+      description: Возвращает профиль пользователя, извлечённого из JWT-токена.
+      responses:
+        '200':
+          description: Данные пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /login:
     post:
       tags: [auth]

@@ -12,6 +12,7 @@ import (
 type AuthUseCase interface {
 	Register(ctx context.Context, cmd usecase.RegisterRequest) (*usecase.AuthResult, error)
 	Login(ctx context.Context, cmd usecase.LoginRequest) (*usecase.AuthResult, error)
+	Get(ctx context.Context, userID int64) (*domain.User, error)
 }
 
 // TeamUseCase — порт HTTP-слоя для сценариев команд.
@@ -90,6 +91,20 @@ func (h *Handler) Login(ctx context.Context, request openapi.LoginRequestObject)
 		ExpiresAt: result.ExpiresAt,
 		User:      toAPIUser(result.User),
 	}, nil
+}
+
+func (h *Handler) GetMe(ctx context.Context, _ openapi.GetMeRequestObject) (openapi.GetMeResponseObject, error) {
+	userID, err := currentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := h.auth.Get(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return openapi.GetMe200JSONResponse(toAPIUser(*user)), nil
 }
 
 func (h *Handler) CreateTeam(ctx context.Context, request openapi.CreateTeamRequestObject) (openapi.CreateTeamResponseObject, error) {
